@@ -1,0 +1,77 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: farmos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-farmos}
+      POSTGRES_DB: farmos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://farmos:${POSTGRES_PASSWORD:-farmos}@db:5432/farmos
+      REDIS_URL: redis://redis:6379/0
+      RUN_SCHEDULER: "false"
+      UPLOAD_DIR: /data
+    volumes:
+      - uploads:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://farmos:${POSTGRES_PASSWORD:-farmos}@db:5432/farmos
+      REDIS_URL: redis://redis:6379/0
+      RUN_SCHEDULER: "true"
+      UPLOAD_DIR: /data
+    volumes:
+      - uploads:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    command: python -m app.worker
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_INTERNAL_URL: http://backend:8000
+    environment:
+      API_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:

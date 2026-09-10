@@ -1,0 +1,54 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    app_name: str = "RackKit FarmOS"
+    secret_key: str = "change-me-in-production-use-a-long-random-string"
+    jwt_expire_minutes: int = 60 * 24 * 7
+    database_url: str = "postgresql+asyncpg://farmos:farmos@127.0.0.1:5432/farmos"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    upload_dir: Path = Path("/workspace/data")
+    cors_origins: str = "http://127.0.0.1:43123,http://localhost:43123"
+    run_scheduler: bool = True
+    scheduler_interval_seconds: float = 2.0
+    simulated_time_scale: float = 20.0
+    filament_low_grams: float = 150.0
+    woocommerce_url: str = ""
+    woocommerce_key: str = ""
+    woocommerce_secret: str = ""
+    notify_webhook_url: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "farmos@localhost"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def gcode_dir(self) -> Path:
+        return self.upload_dir / "gcode"
+
+    @property
+    def stl_dir(self) -> Path:
+        return self.upload_dir / "stl"
+
+    @property
+    def qr_dir(self) -> Path:
+        return self.upload_dir / "qr"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    settings = Settings()
+    settings.gcode_dir.mkdir(parents=True, exist_ok=True)
+    settings.stl_dir.mkdir(parents=True, exist_ok=True)
+    settings.qr_dir.mkdir(parents=True, exist_ok=True)
+    return settings

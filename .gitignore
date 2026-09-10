@@ -1,0 +1,11 @@
+.env
+backend/.env
+backend/.venv/
+frontend/node_modules/
+frontend/.next/
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+backups/
+*.sql.gz
