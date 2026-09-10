@@ -462,44 +462,90 @@ async def seed_demo(db: AsyncSession) -> None:
             notes="Replaced PEI sheet, tightened X belt, flushed nozzle.",
         )
     )
+    from app.services.notifications import ensure_defaults, print_complete_copy
+
+    complete_title, complete_body = print_complete_copy(
+        printers[1].name,
+        "RK-FR5-Upright-x2.gcode",
+        run.name,
+        2,
+        9800,
+        now - timedelta(minutes=8),
+    )
     db.add(
         Notification(
-            type=NotificationType.bed_needs_clearing,
-            title="Bay-02 K1 Max waiting for bed clear",
-            body="RK-FR5-Upright-x2.gcode finished. Confirm the bed is empty before the next job starts.",
-            severity="warning",
-            entity_type="printer",
-            entity_id=str(printers[1].id),
+            type=NotificationType.print_completed.value,
+            title=complete_title,
+            body=complete_body,
+            severity="info",
+            entity_type="job",
+            entity_id=str(done_job.id),
+            printer_id=printers[1].id,
+            printer_name=printers[1].name,
+            job_id=done_job.id,
+            job_label="RK-FR5-Upright-x2.gcode",
+            production_run_id=run.id,
+            production_run_name=run.name,
+            deep_link="/printers/" + str(printers[1].id),
+            extra={"quantity": 2, "duration_seconds": 9800},
         )
     )
     db.add(
         Notification(
-            type=NotificationType.filament_low,
+            type=NotificationType.bed_needs_clearing.value,
+            title="Bay-02 K1 Max — Bed needs clearing",
+            body="RK-FR5-Upright-x2.gcode is finished on Bay-02 K1 Max.\n\nStatus: Waiting for Bed Clear\nConfirm the bed is empty to release the next queued job.",
+            severity="warning",
+            entity_type="printer",
+            entity_id=str(printers[1].id),
+            printer_id=printers[1].id,
+            printer_name=printers[1].name,
+            job_label="RK-FR5-Upright-x2.gcode",
+            production_run_name=run.name,
+            deep_link="/printers/" + str(printers[1].id),
+        )
+    )
+    db.add(
+        Notification(
+            type=NotificationType.filament_low.value,
             title="Low filament: eSun PETG White 1kg",
             body="120 g remaining. Bay-02 may not complete a full upright plate.",
             severity="warning",
             entity_type="spool",
             entity_id=str(spools[1].id),
+            printer_id=printers[1].id,
+            printer_name=printers[1].name,
+            deep_link="/filament",
         )
     )
     db.add(
         Notification(
-            type=NotificationType.print_failed,
-            title="Bay-05 CR-6 SE: print failed",
-            body="Layer shift at 41% — belt skipped. Reprint queued.",
+            type=NotificationType.print_failed.value,
+            title="Bay-05 CR-6 SE — Print Failed",
+            body="RK-FR5-TopFrame.gcode failed on Bay-05 CR-6 SE.\n\nReason: Layer shift at 41% — belt skipped. Reprint queued.",
             severity="error",
             entity_type="job",
             entity_id=str(failed_job.id),
+            printer_id=printers[4].id,
+            printer_name=printers[4].name,
+            job_id=failed_job.id,
+            job_label="RK-FR5-TopFrame.gcode",
+            production_run_name=run.name,
+            deep_link="/printers/" + str(printers[4].id),
         )
     )
     db.add(
         Notification(
-            type=NotificationType.order_ready,
+            type=NotificationType.order_ready.value,
             title="Order RK-1042 ready for fulfilment",
             body="Northline Studio — parts reserved from finished inventory.",
             severity="info",
             entity_type="order",
             entity_id=str(ready_order.id),
+            order_id=ready_order.id,
+            order_reference=ready_order.reference,
+            deep_link="/orders/" + str(ready_order.id),
         )
     )
+    await ensure_defaults(db)
     await db.flush()

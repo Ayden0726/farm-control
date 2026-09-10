@@ -15,7 +15,9 @@ from app.models import (
     GCodeFile,
     GCodePrinterCompat,
     JobStatus,
+    Notification,
     NotificationType,
+    Order,
     PrintJob,
     Printer,
     PrinterStatus,
@@ -27,9 +29,24 @@ from app.models import (
     QcStatus,
     utcnow,
 )
-from app.services.notifications import notify
+from app.services.notifications import NotifyContext, notify, print_complete_copy, recently_notified
 
-logger = logging.getLogger("farmos.scheduler")
+async def _ctx_for_job(db: AsyncSession, job: PrintJob, printer: Printer) -> NotifyContext:
+    run_name = None
+    if job.production_run_id:
+        run = await db.get(ProductionRun, job.production_run_id)
+        run_name = run.name if run else None
+    gcode = await db.get(GCodeFile, job.gcode_file_id) if job.gcode_file_id else None
+    filename = printer.current_file or (gcode.filename if gcode else None) or "print"
+    return NotifyContext(
+        printer_id=printer.id,
+        printer_name=printer.name,
+        job_id=job.id,
+        job_label=filename,
+        production_run_id=job.production_run_id,
+        production_run_name=run_name,
+        quantity=job.quantity_produced,
+    )
 
 
 def _elapsed_print_seconds(job: PrintJob, now: datetime) -> float:
@@ -64,23 +81,32 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
         job.fail_reason = reason or "Print failed"
         printer.failed_jobs += 1
         printer.last_error = job.fail_reason
+        ctx = await _ctx_for_job(db, job, printer)
+        ctx.duration_seconds = duration
         await notify(
             db,
             NotificationType.print_failed,
-            f"{printer.name}: print failed",
-            job.fail_reason or "",
+            f"{printer.name} — Print Failed",
+            (
+                f"{ctx.job_label} failed on {printer.name}.\n\n"
+                f"Reason: {job.fail_reason}\n"
+                f"Production Run: {ctx.production_run_name or '—'}\n\n"
+                "The printer is waiting for bed clear before it can take another job."
+            ),
             severity="error",
             entity_type="job",
             entity_id=job.id,
+            ctx=ctx,
         )
         await notify(
             db,
             NotificationType.bed_needs_clearing,
-            f"{printer.name} waiting for bed clear",
-            "Remove failed print before the next job can start.",
+            f"{printer.name} — Bed needs clearing",
+            f"Remove the failed print from {printer.name} before the next queued job can start.",
             severity="warning",
             entity_type="printer",
             entity_id=printer.id,
+            ctx=ctx,
         )
         return
 
@@ -114,29 +140,46 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
                 db,
                 NotificationType.filament_low,
                 f"Low filament: {spool.name}",
-                f"{spool.remaining_weight_g:.0f} g remaining of {spool.material} {spool.color}.",
+                f"{spool.remaining_weight_g:.0f} g remaining of {spool.material} {spool.color} on {printer.name}.",
                 severity="warning",
                 entity_type="spool",
                 entity_id=spool.id,
+                ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
             )
 
-    filename = printer.current_file or "print"
+    ctx = await _ctx_for_job(db, job, printer)
+    ctx.duration_seconds = duration
+    ctx.extra = {"quantity": job.quantity_produced, "completed_at": now.isoformat()}
+    title, body = print_complete_copy(
+        printer.name,
+        ctx.job_label or "print",
+        ctx.production_run_name,
+        job.quantity_produced,
+        duration,
+        now,
+    )
     await notify(
         db,
         NotificationType.print_completed,
-        f"{printer.name} finished {filename}",
-        f"{job.quantity_produced} part(s) awaiting QC. Bed must be cleared before the next job.",
+        title,
+        body,
         entity_type="job",
         entity_id=job.id,
+        ctx=ctx,
     )
     await notify(
         db,
         NotificationType.bed_needs_clearing,
-        f"{printer.name} waiting for bed clear",
-        "Confirm the bed is empty to release the next queued job.",
+        f"{printer.name} — Bed needs clearing",
+        (
+            f"{ctx.job_label} is finished on {printer.name}.\n\n"
+            "Status: Waiting for Bed Clear\n"
+            "Confirm the bed is empty to release the next queued job."
+        ),
         severity="warning",
         entity_type="printer",
         entity_id=printer.id,
+        ctx=ctx,
     )
     if job.production_run_id:
         await maybe_complete_run(db, job.production_run_id)
@@ -166,11 +209,32 @@ async def maybe_complete_run(db: AsyncSession, run_id: UUID) -> None:
         await notify(
             db,
             NotificationType.production_run_completed,
-            f"Production run complete: {run.name}",
-            "All required prints have finished. QC may still be outstanding.",
+            f"{run.name} — Production complete",
+            f"All required prints for {run.name} have finished. QC may still be outstanding.",
             entity_type="production_run",
             entity_id=run.id,
+            ctx=NotifyContext(production_run_id=run.id, production_run_name=run.name),
         )
+        orders = (await db.execute(select(Order).where(Order.production_run_id == run.id))).scalars().all()
+        for order in orders:
+            await notify(
+                db,
+                NotificationType.order_production_complete,
+                f"Order {order.reference} finished production",
+                f"Printing for order {order.reference} ({order.customer_name or 'customer'}) is complete. QC and fulfilment may still be outstanding.",
+                entity_type="order",
+                entity_id=order.id,
+                ctx=NotifyContext(
+                    order_id=order.id,
+                    order_reference=order.reference,
+                    production_run_id=run.id,
+                    production_run_name=run.name,
+                ),
+            )
+            from app.services.orders import refresh_order_status
+
+            await db.refresh(order, attribute_names=["part_needs", "production_run", "lines"])
+            await refresh_order_status(db, order)
 
 
 async def update_simulated_job(db: AsyncSession, printer: Printer, job: PrintJob) -> None:
@@ -208,6 +272,17 @@ async def poll_live_printer(db: AsyncSession, printer: Printer) -> None:
         adapter = build_adapter(printer)
         snap = await adapter.get_status()
     except Exception as exc:
+        if printer.status != PrinterStatus.offline:
+            await notify(
+                db,
+                NotificationType.printer_offline,
+                f"{printer.name} went offline unexpectedly",
+                str(exc),
+                severity="error",
+                entity_type="printer",
+                entity_id=printer.id,
+                ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
+            )
         printer.status = PrinterStatus.offline
         printer.last_error = str(exc)
         return
@@ -225,11 +300,12 @@ async def poll_live_printer(db: AsyncSession, printer: Printer) -> None:
             await notify(
                 db,
                 NotificationType.printer_offline,
-                f"{printer.name} went offline",
-                snap.error or "",
+                f"{printer.name} went offline unexpectedly",
+                snap.error or f"{printer.name} stopped responding. Check power, network, and the printer adapter.",
                 severity="error",
                 entity_type="printer",
                 entity_id=printer.id,
+                ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
             )
         printer.status = PrinterStatus.offline
         printer.last_error = snap.error
@@ -252,6 +328,17 @@ async def poll_live_printer(db: AsyncSession, printer: Printer) -> None:
                 printer.status = PrinterStatus.printing
         return
     if snap.status == "error":
+        if printer.status != PrinterStatus.error:
+            await notify(
+                db,
+                NotificationType.printer_error,
+                f"{printer.name} reported an error",
+                snap.error or f"{printer.name} entered an error state.",
+                severity="error",
+                entity_type="printer",
+                entity_id=printer.id,
+                ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
+            )
         printer.status = PrinterStatus.error
     elif snap.status == "printing":
         printer.status = PrinterStatus.printing
@@ -293,15 +380,17 @@ async def spool_sufficient(db: AsyncSession, printer: Printer, job: PrintJob) ->
     if not spool:
         return True
     if spool.remaining_weight_g < job.estimated_filament_grams * 1.08:
-        await notify(
-            db,
-            NotificationType.filament_low,
-            f"{printer.name}: spool may not have enough filament",
-            f"{spool.name} has {spool.remaining_weight_g:.0f} g; job needs ~{job.estimated_filament_grams:.0f} g.",
-            severity="warning",
-            entity_type="printer",
-            entity_id=printer.id,
-        )
+        if not await recently_notified(db, NotificationType.filament_low.value, printer.id, hours=6):
+            await notify(
+                db,
+                NotificationType.filament_low,
+                f"{printer.name}: spool may not have enough filament",
+                f"{spool.name} has {spool.remaining_weight_g:.0f} g; job needs ~{job.estimated_filament_grams:.0f} g.",
+                severity="warning",
+                entity_type="printer",
+                entity_id=printer.id,
+                ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name, job_id=job.id),
+            )
         return False
     return True
 
@@ -414,4 +503,39 @@ async def tick(db: AsyncSession) -> None:
                 printer.bed_temp = max(22, printer.bed_temp * 0.9)
         else:
             await poll_live_printer(db, printer)
+    await _maybe_notify_maintenance(db, printers)
     await assign_jobs(db)
+
+
+async def _maybe_notify_maintenance(db: AsyncSession, printers: list[Printer]) -> None:
+    from datetime import timedelta
+    cutoff = utcnow() - timedelta(hours=24)
+    for printer in printers:
+        hours = printer.total_print_seconds / 3600.0
+        remaining = (printer.maintenance_interval_hours or 200) - hours
+        if remaining > 5:
+            continue
+        recent = (
+            await db.execute(
+                select(Notification).where(
+                    Notification.type == NotificationType.maintenance_due.value,
+                    Notification.printer_id == printer.id,
+                    Notification.created_at >= cutoff,
+                )
+            )
+        ).scalars().first()
+        if recent:
+            continue
+        await notify(
+            db,
+            NotificationType.maintenance_due,
+            f"{printer.name} — maintenance due",
+            (
+                f"{printer.name} has {hours:.1f} print hours against a {printer.maintenance_interval_hours:.0f} hour interval "
+                f"({remaining:.1f} h remaining)."
+            ),
+            severity="warning",
+            entity_type="printer",
+            entity_id=printer.id,
+            ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
+        )

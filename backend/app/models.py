@@ -94,11 +94,34 @@ class NotificationType(str, enum.Enum):
     print_completed = "print_completed"
     print_failed = "print_failed"
     printer_offline = "printer_offline"
+    printer_error = "printer_error"
     bed_needs_clearing = "bed_needs_clearing"
     production_run_completed = "production_run_completed"
+    order_production_complete = "order_production_complete"
     order_ready = "order_ready"
     filament_low = "filament_low"
+    maintenance_due = "maintenance_due"
     info = "info"
+
+
+PHONE_EVENTS: tuple[NotificationType, ...] = (
+    NotificationType.print_completed,
+    NotificationType.print_failed,
+    NotificationType.printer_offline,
+    NotificationType.printer_error,
+    NotificationType.bed_needs_clearing,
+    NotificationType.production_run_completed,
+    NotificationType.order_production_complete,
+    NotificationType.order_ready,
+    NotificationType.filament_low,
+    NotificationType.maintenance_due,
+)
+
+
+class DeliveryStatus(str, enum.Enum):
+    sent = "sent"
+    failed = "failed"
+    skipped = "skipped"
 
 
 class TimestampMixin:
@@ -512,13 +535,70 @@ class Notification(TimestampMixin, Base):
     __tablename__ = "notifications"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType))
+    type: Mapped[str] = mapped_column(String(50), index=True)
     title: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text, default="")
     severity: Mapped[str] = mapped_column(String(20), default="info")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    printer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    job_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    production_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    production_run_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    order_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    deep_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    deliveries: Mapped[list[NotificationDelivery]] = relationship(
+        back_populates="notification", cascade="all, delete-orphan"
+    )
+
+
+class NotificationDelivery(TimestampMixin, Base):
+    __tablename__ = "notification_deliveries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    notification_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("notifications.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="sent", index=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    notification: Mapped[Notification] = relationship(back_populates="deliveries")
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    event_type: Mapped[str] = mapped_column(String(50), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PrinterNotificationPreference(Base):
+    __tablename__ = "printer_notification_preferences"
+    __table_args__ = (UniqueConstraint("printer_id", "event_type"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    printer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
+    event_type: Mapped[str] = mapped_column(String(50))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    printer: Mapped[Printer] = relationship()
+
+
+class NotificationProviderSetting(TimestampMixin, Base):
+    __tablename__ = "notification_provider_settings"
+
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    public_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    secrets_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class MaintenanceLog(TimestampMixin, Base):

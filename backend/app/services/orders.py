@@ -20,7 +20,7 @@ from app.models import (
     utcnow,
 )
 from app.services.inventory import consume_reserved, get_or_create_stock, release_reservation, reserve_parts
-from app.services.notifications import notify
+from app.services.notifications import NotifyContext, notify
 from app.services.queue import enqueue_jobs_for_item
 
 
@@ -64,10 +64,11 @@ async def apply_inventory_to_order(db: AsyncSession, order: Order) -> None:
             db,
             NotificationType.order_ready,
             f"Order {order.reference} ready to ship",
-            "All required parts were reserved from finished-part inventory.",
+            f"All required parts for {order.reference} were reserved from finished-part inventory.",
             severity="info",
             entity_type="order",
             entity_id=order.id,
+            ctx=NotifyContext(order_id=order.id, order_reference=order.reference),
         )
     elif missing:
         order.status = OrderStatus.awaiting_production
@@ -158,9 +159,10 @@ async def refresh_order_status(db: AsyncSession, order: Order) -> None:
                     db,
                     NotificationType.order_ready,
                     f"Order {order.reference} ready for fulfilment",
-                    "Required parts are in finished inventory.",
+                    "Required parts are in finished inventory. Mark the order fulfilled/shipped when packed.",
                     entity_type="order",
                     entity_id=order.id,
+                    ctx=NotifyContext(order_id=order.id, order_reference=order.reference),
                 )
 
 

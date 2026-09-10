@@ -36,6 +36,7 @@ const NAV = [
   { href: "/products", label: "Products / BOM", icon: Boxes },
   { href: "/analytics", label: "Analytics", icon: Activity },
   { href: "/maintenance", label: "Maintenance", icon: Wrench },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

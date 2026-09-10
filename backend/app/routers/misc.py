@@ -33,7 +33,7 @@ from app.schemas import (
 from app.services.qr import render_qr_png
 from app.services.woocommerce import woocommerce_configured
 
-notify_router = APIRouter(prefix="/notifications", tags=["notifications"])
+notify_router = APIRouter(prefix="/notifications-legacy-removed", tags=["notifications"])
 maint_router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 analytics_router = APIRouter(prefix="/analytics", tags=["analytics"])
 settings_router = APIRouter(prefix="/settings", tags=["settings"])

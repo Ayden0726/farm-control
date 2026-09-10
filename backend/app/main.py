@@ -10,25 +10,20 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.config import get_settings
-from app.db import Base, engine
+from app.db import engine
+from app.schema_upgrade import upgrade_schema
 from app.routers.auth import router as auth_router
 from app.routers.catalog import gcode_router, parts_router, stl_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.filament import router as filament_router
 from app.routers.inventory import router as inventory_router
-from app.routers.misc import (
-    analytics_router,
-    maint_router,
-    notify_router,
-    qr_router,
-    scan_router,
-    settings_router,
-)
+from app.routers.notify_api import router as notify_router
 from app.routers.orders import router as orders_router
 from app.routers.printers import router as printers_router
 from app.routers.production import router as production_router
 from app.routers.products import router as products_router
 from app.routers.queue import router as queue_router
+from app.routers.misc import analytics_router, maint_router, qr_router, scan_router, settings_router
 from app.util import configure_logging
 
 logger = logging.getLogger("farmos")
@@ -70,7 +65,7 @@ async def lifespan(app: FastAPI):
     configure_logging()
     settings = get_settings()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(upgrade_schema)
     task = None
     if settings.run_scheduler:
         task = asyncio.create_task(_scheduler_loop())

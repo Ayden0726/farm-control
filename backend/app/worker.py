@@ -3,8 +3,9 @@
 import asyncio
 import logging
 
-from app.db import Base, engine
+from app.db import engine
 from app.main import _scheduler_loop
+from app.schema_upgrade import upgrade_schema
 from app.util import configure_logging
 
 logger = logging.getLogger("farmos.worker")
@@ -13,7 +14,7 @@ logger = logging.getLogger("farmos.worker")
 async def main() -> None:
     configure_logging()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(upgrade_schema)
     logger.info("FarmOS worker starting")
     await _scheduler_loop()
 

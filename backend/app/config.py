@@ -21,12 +21,26 @@ class Settings(BaseSettings):
     woocommerce_url: str = ""
     woocommerce_key: str = ""
     woocommerce_secret: str = ""
+    public_app_url: str = "http://127.0.0.1:43123"
     notify_webhook_url: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "farmos@localhost"
+    smtp_to: str = ""
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_topic: str = ""
+    ntfy_token: str = ""
+    pushover_app_token: str = ""
+    pushover_user_key: str = ""
+    discord_webhook_url: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from: str = ""
+    sms_to: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
