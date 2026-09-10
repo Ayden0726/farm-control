@@ -31,7 +31,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   const t = token();
   if (t) headers.set("Authorization", `Bearer ${t}`);
-  const res = await fetch(path, { ...init, headers });
+  const doFetch = typeof window !== "undefined" ? window.fetch.bind(window) : fetch;
+  const res = await doFetch(path, {
+    ...init,
+    headers,
+    cache: "no-store",
+    signal: init.signal ?? AbortSignal.timeout(20000),
+  });
   if (res.status === 401 && typeof window !== "undefined") {
     const here = window.location.pathname;
     if (here !== "/login" && here !== "/setup") {
