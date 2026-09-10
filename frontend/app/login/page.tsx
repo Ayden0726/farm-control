@@ -1,23 +1,28 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, AuthUser, setToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Suspense } from "react";
+
+const fieldClass =
+  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
-  const [email, setEmail] = useState("ops@rackkit.local");
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const email = String(data.get("email") || "").trim();
+    const password = String(data.get("password") || "");
+    if (!password) {
+      toast.error("Enter your password.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await api<AuthUser>("/api/v1/auth/login", {
@@ -25,10 +30,9 @@ function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
       setToken(res.access_token);
-      router.replace(params.get("next") || "/");
+      window.location.assign(params.get("next") || "/");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed");
-    } finally {
       setBusy(false);
     }
   }
@@ -51,16 +55,25 @@ function LoginForm() {
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              defaultValue="ops@rackkit.local"
+              required
+              className={fieldClass}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="password">Password</Label>
-            <Input
+            <input
               id="password"
+              name="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               required
+              className={fieldClass}
             />
           </div>
           <Button type="submit" className="w-full" disabled={busy}>
