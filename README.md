@@ -133,7 +133,7 @@ uvicorn app.main:app --reload --port 8472
 # frontend
 cd frontend
 npm install
-API_INTERNAL_URL=http://127.0.0.1:8472 npm run dev -- --port 43123 --hostname 0.0.0.0
+API_INTERNAL_URL=http://127.0.0.1:8472 npm run dev
 ```
 
 ## Security notes

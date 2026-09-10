@@ -10,10 +10,15 @@ const PUBLIC = new Set(["/login", "/setup"]);
 export function Gate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const isPublic = PUBLIC.has(pathname);
+  const [ready, setReady] = useState(isPublic);
 
   useEffect(() => {
     let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, 4000);
+
     async function boot() {
       try {
         const status = await api<{ needs_setup: boolean }>("/api/v1/setup/status");
@@ -24,8 +29,7 @@ export function Gate({ children }: { children: React.ReactNode }) {
           return;
         }
         if (!getToken() && !PUBLIC.has(pathname)) {
-          const next = pathname.startsWith("/scan") ? pathname : "/";
-          router.replace(next === "/" ? "/login" : `/login?next=${encodeURIComponent(pathname)}`);
+          router.replace(pathname.startsWith("/scan") ? `/login?next=${encodeURIComponent(pathname)}` : "/login");
           setReady(true);
           return;
         }
@@ -34,15 +38,19 @@ export function Gate({ children }: { children: React.ReactNode }) {
         }
         setReady(true);
       } catch {
-        setReady(true);
+        if (!cancelled) setReady(true);
+      } finally {
+        window.clearTimeout(timeout);
       }
     }
     boot();
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, [pathname, router]);
 
+  if (isPublic) return <>{children}</>;
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-zinc-400">
@@ -50,7 +58,5 @@ export function Gate({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
-  if (PUBLIC.has(pathname)) return <>{children}</>;
   return <AppShell>{children}</AppShell>;
 }
