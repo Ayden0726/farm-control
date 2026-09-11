@@ -70,24 +70,26 @@ export default function ProductDetailPage() {
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!row) return;
+    const current = row;
     const fd = new FormData(e.currentTarget);
     try {
       await api(`/api/v1/filament/products/${params.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          manufacturer: row.manufacturer,
-          product_name: row.product_name,
-          material: row.material,
-          color: row.color,
-          spool_size_label: row.spool_size_label,
-          filament_weight_g: row.filament_weight_g,
+          manufacturer: current.manufacturer,
+          product_name: current.product_name,
+          material: current.material,
+          color: current.color,
+          spool_size_label: current.spool_size_label,
+          filament_weight_g: current.filament_weight_g,
           purchase_cost: Number(fd.get("purchase_cost")),
           supplier_sku: String(fd.get("supplier_sku") || ""),
           supplier_url: String(fd.get("supplier_url") || ""),
           notes: String(fd.get("notes") || ""),
           min_stock_g: Number(fd.get("min_stock_g")),
           target_stock_g: Number(fd.get("target_stock_g")),
-          preferred_spool_weight_g: row.preferred_spool_weight_g,
+          preferred_spool_weight_g: current.preferred_spool_weight_g,
           normal_price: Number(fd.get("normal_price")),
           max_price: Number(fd.get("max_price")),
           max_price_per_kg: Number(fd.get("max_price_per_kg")),
@@ -97,8 +99,8 @@ export default function ProductDetailPage() {
           reorder_mode: String(fd.get("reorder_mode")),
           approval_required: fd.get("approval_required") === "on",
           max_po_amount: Number(fd.get("max_po_amount")),
-          nozzle_temp_c: row.nozzle_temp_c,
-          bed_temp_c: row.bed_temp_c,
+          nozzle_temp_c: current.nozzle_temp_c,
+          bed_temp_c: current.bed_temp_c,
         }),
       });
       toast.success("Reorder settings saved");
@@ -176,21 +178,23 @@ export default function ProductDetailPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={save} className="grid gap-3 sm:grid-cols-3">
-            {[
-              ["min_stock_g", "Minimum (g)", row.min_stock_g],
-              ["target_stock_g", "Target (g)", row.target_stock_g],
-              ["normal_price", "Normal price", row.normal_price],
-              ["purchase_cost", "Purchase cost", row.purchase_cost],
-              ["max_price", "Max price", row.max_price],
-              ["max_price_per_kg", "Max $/kg", row.max_price_per_kg],
-              ["min_reorder_qty", "Min reorder qty", row.min_reorder_qty],
-              ["reorder_multiple", "Reorder multiple", row.reorder_multiple],
-              ["lead_time_days", "Lead time (days)", row.lead_time_days],
-              ["max_po_amount", "Max PO amount", row.max_po_amount],
-            ].map(([name, label, value]) => (
-              <div key={name} className="space-y-1">
-                <Label>{label}</Label>
-                <Input name={name} defaultValue={String(value)} />
+            {(
+              [
+                { name: "min_stock_g", label: "Minimum (g)", value: row.min_stock_g },
+                { name: "target_stock_g", label: "Target (g)", value: row.target_stock_g },
+                { name: "normal_price", label: "Normal price", value: row.normal_price },
+                { name: "purchase_cost", label: "Purchase cost", value: row.purchase_cost },
+                { name: "max_price", label: "Max price", value: row.max_price },
+                { name: "max_price_per_kg", label: "Max $/kg", value: row.max_price_per_kg },
+                { name: "min_reorder_qty", label: "Min reorder qty", value: row.min_reorder_qty },
+                { name: "reorder_multiple", label: "Reorder multiple", value: row.reorder_multiple },
+                { name: "lead_time_days", label: "Lead time (days)", value: row.lead_time_days },
+                { name: "max_po_amount", label: "Max PO amount", value: row.max_po_amount },
+              ] as { name: string; label: string; value: number }[]
+            ).map((field) => (
+              <div key={field.name} className="space-y-1">
+                <Label>{field.label}</Label>
+                <Input name={field.name} defaultValue={String(field.value)} />
               </div>
             ))}
             <div className="space-y-1">

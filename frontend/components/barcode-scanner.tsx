@@ -27,13 +27,14 @@ export function BarcodeScanner({
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
         const scanner = new Html5Qrcode(host.current.id);
         scannerRef.current = scanner;
+        const config = {
+          fps: 8,
+          qrbox: { width: 280, height: 180 },
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128],
+        };
         await scanner.start(
           { facingMode: "environment" },
-          {
-            fps: 8,
-            qrbox: { width: 280, height: 180 },
-            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128],
-          },
+          config as never,
           (text) => {
             if (text) onDetectRef.current(text);
           },

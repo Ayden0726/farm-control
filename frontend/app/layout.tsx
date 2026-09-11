@@ -22,6 +22,9 @@ export const metadata: Metadata = {
   applicationName: "RackKit FarmOS",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "FarmOS" },
+};
+
+export const viewport = {
   themeColor: "#d97706",
 };
 

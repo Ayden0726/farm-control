@@ -80,7 +80,7 @@ export default function QueuePage() {
                   {job.hold_reason === "insufficient_filament" && (
                     <div className="mt-1 max-w-[220px] text-[11px] text-amber-200">
                       Insufficient filament
-                      {job.filament_required_g ? `: need ${Math.round(job.filament_required_g)} g, have ${Math.round(job.filament_available_g)} g` : ""}
+                      {job.filament_required_g ? `: need ${Math.round(job.filament_required_g)} g, have ${Math.round(job.filament_available_g || 0)} g` : ""}
                     </div>
                   )}
               </TableCell>
