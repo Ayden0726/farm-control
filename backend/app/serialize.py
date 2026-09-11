@@ -35,8 +35,12 @@ def hours_until_maintenance(printer: Printer) -> float | None:
 
 def printer_out(printer: Printer) -> PrinterOut:
     spool_name = None
+    spool_code = None
+    spool_remaining = None
     if printer.assigned_spool is not None:
         spool_name = printer.assigned_spool.name
+        spool_code = printer.assigned_spool.public_code
+        spool_remaining = printer.assigned_spool.remaining_weight_g
     extra = dict(printer.extra_config or {})
     extra.pop("sim", None)  # don't leak internal sim blob as required config
     return PrinterOut(
@@ -69,6 +73,9 @@ def printer_out(printer: Printer) -> PrinterOut:
         maintenance_notes=printer.maintenance_notes,
         qr_token=printer.qr_token,
         hours_until_maintenance=hours_until_maintenance(printer),
+        public_code=printer.public_code,
+        assigned_spool_code=spool_code,
+        assigned_spool_remaining_g=spool_remaining,
     )
 
 
@@ -98,6 +105,13 @@ def job_out(job: PrintJob) -> JobOut:
         estimated_time_seconds=job.estimated_time_seconds,
         qr_token=job.qr_token,
         created_at=job.created_at,
+        filament_override=bool(getattr(job, "filament_override", False)),
+        hold_reason=getattr(job, "hold_reason", None),
+        filament_required_g=getattr(job, "filament_required_g", 0) or 0,
+        filament_available_g=getattr(job, "filament_available_g", 0) or 0,
+        required_material=job.gcode_file.material if job.gcode_file else None,
+        required_color=job.gcode_file.required_color if job.gcode_file else None,
+        spool_code=job.spool.public_code if getattr(job, "spool", None) else None,
     )
 
 

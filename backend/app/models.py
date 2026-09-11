@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -100,6 +101,7 @@ class NotificationType(str, enum.Enum):
     order_production_complete = "order_production_complete"
     order_ready = "order_ready"
     filament_low = "filament_low"
+    filament_reorder = "filament_reorder"
     maintenance_due = "maintenance_due"
     info = "info"
 
@@ -114,6 +116,7 @@ PHONE_EVENTS: tuple[NotificationType, ...] = (
     NotificationType.order_production_complete,
     NotificationType.order_ready,
     NotificationType.filament_low,
+    NotificationType.filament_reorder,
     NotificationType.maintenance_due,
 )
 
@@ -174,6 +177,7 @@ class GCodeFile(TimestampMixin, Base):
     material: Mapped[str] = mapped_column(String(50), default="PETG")
     estimated_time_seconds: Mapped[int] = mapped_column(Integer, default=3600)
     estimated_filament_grams: Mapped[float] = mapped_column(Float, default=20.0)
+    required_color: Mapped[str] = mapped_column(String(80), default="")
     version: Mapped[int] = mapped_column(Integer, default=1)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str] = mapped_column(Text, default="")
@@ -275,6 +279,7 @@ class Printer(TimestampMixin, Base):
     maintenance_interval_hours: Mapped[float] = mapped_column(Float, default=200)
     maintenance_notes: Mapped[str] = mapped_column(Text, default="")
     qr_token: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
 
     assigned_spool: Mapped[FilamentSpool | None] = relationship(
         foreign_keys=[assigned_spool_id], post_update=True
@@ -293,21 +298,44 @@ class FilamentSpool(TimestampMixin, Base):
     initial_weight_g: Mapped[float] = mapped_column(Float, default=1000)
     remaining_weight_g: Mapped[float] = mapped_column(Float, default=1000)
     cost: Mapped[float] = mapped_column(Float, default=0)
+    cost_per_kg: Mapped[float] = mapped_column(Float, default=0)
     purchase_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    date_received: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    date_opened: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_dried_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     assigned_printer_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("printers.id", use_alter=True), nullable=True
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("filament_products.id"), nullable=True, index=True
+    )
+    location_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("storage_locations.id"), nullable=True, index=True
+    )
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    purchase_order_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("purchase_orders.id"), nullable=True
     )
     drying_status: Mapped[DryingStatus] = mapped_column(
         Enum(DryingStatus), default=DryingStatus.unknown
     )
     low_stock_threshold_g: Mapped[float] = mapped_column(Float, default=150)
     qr_token: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    is_sealed: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_empty: Mapped[bool] = mapped_column(Boolean, default=False)
+    consumed_g: Mapped[float] = mapped_column(Float, default=0)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str] = mapped_column(Text, default="")
 
     assigned_printer: Mapped[Printer | None] = relationship(
         foreign_keys=[assigned_printer_id], post_update=True
     )
+    product: Mapped[FilamentProduct | None] = relationship(back_populates="spools")
+    location: Mapped[StorageLocation | None] = relationship(back_populates="spools")
+    supplier: Mapped[Supplier | None] = relationship()
+    purchase_order: Mapped[PurchaseOrder | None] = relationship()
+    transactions: Mapped[list[FilamentTransaction]] = relationship(back_populates="spool")
 
 
 class ProductionRun(TimestampMixin, Base):
@@ -409,6 +437,10 @@ class PrintJob(TimestampMixin, Base):
     )
     estimated_time_seconds: Mapped[int] = mapped_column(Integer, default=0)
     qr_token: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    filament_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    hold_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    filament_required_g: Mapped[float] = mapped_column(Float, default=0)
+    filament_available_g: Mapped[float] = mapped_column(Float, default=0)
 
     production_run: Mapped[ProductionRun | None] = relationship(back_populates="jobs")
     production_run_item: Mapped[ProductionRunItem | None] = relationship()
@@ -474,6 +506,8 @@ class PartBin(TimestampMixin, Base):
     location: Mapped[str] = mapped_column(String(255), default="")
     part_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("parts.id"), nullable=True)
     qr_token: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    kind: Mapped[str] = mapped_column(String(40), default="finished_part")
 
     part: Mapped[Part | None] = relationship()
 
@@ -612,3 +646,158 @@ class MaintenanceLog(TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
     printer: Mapped[Printer] = relationship(back_populates="maintenance_logs")
+
+
+class Supplier(TimestampMixin, Base):
+    __tablename__ = "suppliers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    website: Mapped[str] = mapped_column(String(500), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    adapter_type: Mapped[str] = mapped_column(String(40), default="url")
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+    credentials_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class StorageLocation(TimestampMixin, Base):
+    __tablename__ = "storage_locations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    kind: Mapped[str] = mapped_column(String(40), default="shelf")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+
+    printer: Mapped[Printer | None] = relationship()
+    spools: Mapped[list[FilamentSpool]] = relationship(back_populates="location")
+
+
+class FilamentProduct(TimestampMixin, Base):
+    __tablename__ = "filament_products"
+    __table_args__ = (Index("ix_filament_products_barcode", "barcode_id", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    barcode_id: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    manufacturer: Mapped[str] = mapped_column(String(100))
+    product_name: Mapped[str] = mapped_column(String(255), default="")
+    material: Mapped[str] = mapped_column(String(50), default="PETG")
+    color: Mapped[str] = mapped_column(String(80), default="")
+    spool_size_label: Mapped[str] = mapped_column(String(40), default="1 kg")
+    filament_weight_g: Mapped[float] = mapped_column(Float, default=1000)
+    purchase_cost: Mapped[float] = mapped_column(Float, default=0)
+    cost_per_kg: Mapped[float] = mapped_column(Float, default=0)
+    preferred_supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("suppliers.id"), nullable=True
+    )
+    backup_supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("suppliers.id"), nullable=True
+    )
+    supplier_sku: Mapped[str] = mapped_column(String(120), default="")
+    supplier_url: Mapped[str] = mapped_column(String(500), default="")
+    nozzle_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bed_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    min_stock_g: Mapped[float] = mapped_column(Float, default=6000)
+    target_stock_g: Mapped[float] = mapped_column(Float, default=18000)
+    preferred_spool_weight_g: Mapped[float] = mapped_column(Float, default=3000)
+    normal_price: Mapped[float] = mapped_column(Float, default=0)
+    max_price: Mapped[float] = mapped_column(Float, default=0)
+    max_price_per_kg: Mapped[float] = mapped_column(Float, default=0)
+    min_reorder_qty: Mapped[int] = mapped_column(Integer, default=1)
+    reorder_multiple: Mapped[int] = mapped_column(Integer, default=1)
+    lead_time_days: Mapped[int] = mapped_column(Integer, default=7)
+    reorder_mode: Mapped[str] = mapped_column(String(40), default="create_purchase_order")
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    max_po_amount: Mapped[float] = mapped_column(Float, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    preferred_supplier: Mapped[Supplier | None] = relationship(foreign_keys=[preferred_supplier_id])
+    backup_supplier: Mapped[Supplier | None] = relationship(foreign_keys=[backup_supplier_id])
+    spools: Mapped[list[FilamentSpool]] = relationship(back_populates="product")
+
+
+class IdSequence(Base):
+    __tablename__ = "id_sequences"
+
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    next_value: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class FilamentTransaction(TimestampMixin, Base):
+    __tablename__ = "filament_transactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    spool_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("filament_spools.id"), index=True)
+    previous_g: Mapped[float] = mapped_column(Float)
+    amount_g: Mapped[float] = mapped_column(Float)
+    remaining_g: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(String(80), index=True)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+    job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("print_jobs.id"), nullable=True)
+    production_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("production_runs.id"), nullable=True
+    )
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    spool: Mapped[FilamentSpool] = relationship(back_populates="transactions")
+    printer: Mapped[Printer | None] = relationship()
+    job: Mapped[PrintJob | None] = relationship()
+    production_run: Mapped[ProductionRun | None] = relationship()
+
+
+class InventoryAudit(TimestampMixin, Base):
+    __tablename__ = "inventory_audit"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), index=True)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    actor: Mapped[str] = mapped_column(String(120), default="system")
+
+
+class PurchaseOrder(TimestampMixin, Base):
+    __tablename__ = "purchase_orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reference: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="draft", index=True)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    tracking: Mapped[str] = mapped_column(String(120), default="")
+    total: Mapped[float] = mapped_column(Float, default=0)
+    ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_delivery: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_created: Mapped[bool] = mapped_column(Boolean, default=False)
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    supplier: Mapped[Supplier | None] = relationship()
+    lines: Mapped[list[PurchaseOrderLine]] = relationship(
+        back_populates="purchase_order", cascade="all, delete-orphan"
+    )
+
+
+class PurchaseOrderLine(Base):
+    __tablename__ = "purchase_order_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    purchase_order_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("filament_products.id"))
+    quantity_ordered: Mapped[int] = mapped_column(Integer, default=1)
+    quantity_received: Mapped[int] = mapped_column(Integer, default=0)
+    spool_weight_g: Mapped[float] = mapped_column(Float, default=1000)
+    unit_price: Mapped[float] = mapped_column(Float, default=0)
+    price_per_kg: Mapped[float] = mapped_column(Float, default=0)
+    supplier_sku: Mapped[str] = mapped_column(String(120), default="")
+
+    purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="lines")
+    product: Mapped[FilamentProduct] = relationship()

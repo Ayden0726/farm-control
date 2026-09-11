@@ -37,6 +37,7 @@ EVENT_LABELS: dict[str, str] = {
     NotificationType.order_production_complete.value: "Order finished production",
     NotificationType.order_ready.value: "Order ready for fulfilment",
     NotificationType.filament_low.value: "Filament low",
+    NotificationType.filament_reorder.value: "Filament reorder",
     NotificationType.maintenance_due.value: "Maintenance due",
 }
 
@@ -181,6 +182,11 @@ def deep_link_for(ntype: NotificationType, ctx: NotifyContext, base: str) -> str
         return f"{base}/production/{ctx.production_run_id}"
     if ntype == NotificationType.filament_low:
         return f"{base}/filament"
+    if ntype == NotificationType.filament_reorder:
+        po_id = (ctx.extra or {}).get("purchase_order_id")
+        if po_id:
+            return f"{base}/filament/purchasing/{po_id}"
+        return f"{base}/filament/purchasing"
     if ctx.job_id:
         return f"{base}/queue"
     return f"{base}/"
@@ -193,6 +199,8 @@ def click_label_for(ntype: NotificationType) -> str:
         return "Open printer"
     if ntype in {NotificationType.order_ready, NotificationType.order_production_complete}:
         return "Open order"
+    if ntype == NotificationType.filament_reorder:
+        return "Review Order"
     return "Open RackKit FarmOS"
 
 

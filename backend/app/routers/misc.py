@@ -301,34 +301,38 @@ async def qr_image(kind: str, token: str):
 
 @scan_router.get("/{kind}/{token}")
 async def resolve_scan(kind: str, token: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
-    if kind == "printer":
-        row = (await db.execute(select(Printer).where(Printer.qr_token == token))).scalar_one_or_none()
-        if not row:
-            raise HTTPException(404, "Unknown printer QR")
-        return {"kind": "printer", "id": str(row.id), "name": row.name, "path": f"/printers/{row.id}"}
-    if kind == "spool":
-        row = (
-            await db.execute(select(FilamentSpool).where(FilamentSpool.qr_token == token))
-        ).scalar_one_or_none()
-        if not row:
-            raise HTTPException(404, "Unknown spool QR")
+    from app.services.barcodes import resolve_code
+
+    hit = await resolve_code(db, f"farmos:{kind}:{token}")
+    if not hit:
+        hit = await resolve_code(db, token)
+    if not hit:
+        raise HTTPException(404, f"Unknown {kind} code")
+    row = hit["row"]
+    found = hit["kind"]
+    if found == "printer":
+        return {"kind": "printer", "id": str(row.id), "name": row.name, "public_code": row.public_code, "path": f"/printers/{row.id}"}
+    if found == "spool":
         return {
             "kind": "spool",
             "id": str(row.id),
             "name": row.name,
+            "public_code": row.public_code,
             "material": row.material,
             "color": row.color,
             "remaining_weight_g": row.remaining_weight_g,
-            "path": "/filament",
+            "path": f"/filament/spools/{row.id}",
         }
-    if kind == "bin":
-        row = (await db.execute(select(PartBin).where(PartBin.qr_token == token))).scalar_one_or_none()
-        if not row:
-            raise HTTPException(404, "Unknown bin QR")
-        return {"kind": "bin", "id": str(row.id), "name": row.name, "path": "/inventory"}
-    if kind == "job":
-        row = (await db.execute(select(PrintJob).where(PrintJob.qr_token == token))).scalar_one_or_none()
-        if not row:
-            raise HTTPException(404, "Unknown job QR")
+    if found == "product":
+        return {
+            "kind": "product",
+            "id": str(row.id),
+            "name": f"{row.manufacturer} {row.material} {row.color}",
+            "barcode_id": row.barcode_id,
+            "path": f"/filament/receive?code={row.barcode_id}",
+        }
+    if found == "bin":
+        return {"kind": "bin", "id": str(row.id), "name": row.name, "public_code": row.public_code, "path": "/inventory"}
+    if found == "job":
         return {"kind": "job", "id": str(row.id), "path": "/queue"}
     raise HTTPException(404, "Unknown QR kind")

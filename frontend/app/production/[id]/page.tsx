@@ -12,9 +12,18 @@ import { toast } from "sonner";
 export default function ProductionDetailPage() {
   const params = useParams<{ id: string }>();
   const [run, setRun] = useState<ProductionRun | null>(null);
+  const [filament, setFilament] = useState<{
+    overall: string;
+    materials: { product_id: string; label: string; required_g: number; available_g: number; on_order_g: number }[];
+  } | null>(null);
 
   async function load() {
     setRun(await api<ProductionRun>(`/api/v1/production-runs/${params.id}`));
+    try {
+      setFilament(await api(`/api/v1/production-runs/${params.id}/filament-check`));
+    } catch {
+      setFilament(null);
+    }
   }
   useEffect(() => {
     load();
@@ -57,6 +66,34 @@ export default function ProductionDetailPage() {
           </Button>
         </div>
       </div>
+      {filament && (
+        <Card className={filament.overall !== "can_start" ? "border-amber-500/40" : ""}>
+          <CardHeader>
+            <CardTitle>Filament for this batch</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="font-medium">
+              {filament.overall === "can_start"
+                ? "Can start now"
+                : filament.overall === "partial"
+                  ? "Can partially start"
+                  : filament.overall === "wait_for_stock"
+                    ? "Should wait for stock on order"
+                    : "Requires another purchase"}
+            </div>
+            {filament.materials.map((m) => (
+              <div key={m.product_id} className="flex justify-between gap-3">
+                <span>
+                  {m.label}: {(m.required_g / 1000).toFixed(1)} kg required
+                </span>
+                <span className="font-mono">
+                  avail {(m.available_g / 1000).toFixed(1)} kg · on order {(m.on_order_g / 1000).toFixed(1)} kg
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
         {run.items.map((item) => (
           <Card key={item.id}>

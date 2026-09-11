@@ -9,6 +9,7 @@ from app.adapters import build_adapter
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import (
+    FilamentSpool,
     GCodeFile,
     JobStatus,
     PrintJob,
@@ -31,6 +32,7 @@ _JOB_LOAD = (
     selectinload(PrintJob.assigned_printer),
     selectinload(PrintJob.actual_printer),
     selectinload(PrintJob.production_run),
+    selectinload(PrintJob.spool),
 )
 
 
@@ -185,3 +187,33 @@ async def move_job(job_id: UUID, payload: JobAction, db: AsyncSession = Depends(
     job.assigned_printer_id = target.id
     await db.commit()
     return job_out(await _job(db, job.id))
+
+
+@router.post("/{job_id}/override-filament", response_model=JobOut)
+async def override_filament(job_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    job = await _job(db, job_id)
+    job.filament_override = True
+    job.hold_reason = None
+    await db.commit()
+    return job_out(await _job(db, job.id))
+
+
+@router.get("/{job_id}/filament-check")
+async def job_filament_status(
+    job_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    from app.services.filament import job_filament_check
+
+    job = await _job(db, job_id)
+    printer = None
+    if job.assigned_printer_id or job.actual_printer_id:
+        printer = await db.get(Printer, job.actual_printer_id or job.assigned_printer_id)
+    if not printer:
+        return {
+            "ok": False,
+            "required_g": job.estimated_filament_grams,
+            "available_g": 0,
+            "reasons": ["Job is not assigned to a printer yet."],
+        }
+    spool = await db.get(FilamentSpool, printer.assigned_spool_id) if printer.assigned_spool_id else None
+    return job_filament_check(job, printer, spool, job.gcode_file)

@@ -167,6 +167,8 @@ async def list_bins(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
             part_id=b.part_id,
             part_sku=b.part.sku if b.part else None,
             qr_token=b.qr_token,
+            public_code=b.public_code,
+            kind=b.kind or "finished_part",
         )
         for b in rows
     ]
@@ -179,8 +181,13 @@ async def create_bin(payload: BinIn, db: AsyncSession = Depends(get_db), _: User
         location=payload.location,
         part_id=payload.part_id,
         qr_token=new_qr_token(),
+        kind="finished_part",
     )
     db.add(bin_row)
+    await db.flush()
+    from app.services.barcodes import bin_public_code, unique_public_code
+
+    bin_row.public_code = await unique_public_code(db, PartBin, "public_code", bin_public_code(bin_row.name))
     await db.commit()
     await db.refresh(bin_row)
     part = await db.get(Part, bin_row.part_id) if bin_row.part_id else None
@@ -191,4 +198,6 @@ async def create_bin(payload: BinIn, db: AsyncSession = Depends(get_db), _: User
         part_id=bin_row.part_id,
         part_sku=part.sku if part else None,
         qr_token=bin_row.qr_token,
+        public_code=bin_row.public_code,
+        kind=bin_row.kind or "finished_part",
     )

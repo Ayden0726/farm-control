@@ -77,8 +77,13 @@ async def create_printer(
         maintenance_notes=payload.maintenance_notes,
         status=PrinterStatus.idle if payload.adapter_type == "simulated" else PrinterStatus.offline,
         qr_token=new_qr_token(),
+        public_code=None,
     )
     db.add(printer)
+    await db.flush()
+    from app.services.barcodes import printer_public_code, unique_public_code
+
+    printer.public_code = await unique_public_code(db, Printer, "public_code", printer_public_code(printer.name))
     await db.commit()
     printer = await _load_printer(db, printer.id)
     return printer_out(printer)
@@ -173,14 +178,15 @@ async def assign_spool(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    from app.services.filament import assign_spool_to_printer
+
     printer = await _load_printer(db, printer_id)
     spool_id = payload.get("spool_id")
     if spool_id:
         spool = await db.get(FilamentSpool, UUID(str(spool_id)))
         if not spool:
             raise HTTPException(404, "Spool not found")
-        printer.assigned_spool_id = spool.id
-        spool.assigned_printer_id = printer.id
+        await assign_spool_to_printer(db, printer, spool, actor="operator")
     else:
         if printer.assigned_spool_id:
             spool = await db.get(FilamentSpool, printer.assigned_spool_id)

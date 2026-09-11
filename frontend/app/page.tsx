@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDuration, formatEta, formatGrams, formatMoney } from "@/lib/format";
 import { toast } from "sonner";
+import { ScanLine } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function Kpi({ label, value, warn }: { label: string; value: number | string; warn?: boolean }) {
   return (
@@ -135,6 +138,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Link href="/scan" className={cn(buttonVariants({ size: "lg" }), "h-12 min-w-28 gap-2 text-base")}>
+          <ScanLine className="size-5" />
+          SCAN
+        </Link>
+      </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         <Kpi label="Printing" value={data.counts.printing} />
         <Kpi label="Bed clear" value={data.counts.waiting_for_bed_clear} warn={data.counts.waiting_for_bed_clear > 0} />

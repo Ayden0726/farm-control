@@ -129,17 +129,14 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
     if printer.assigned_spool_id:
         spool = await db.get(FilamentSpool, printer.assigned_spool_id)
     if spool and job.estimated_filament_grams:
-        used = job.estimated_filament_grams
-        spool.remaining_weight_g = max(0, spool.remaining_weight_g - used)
-        job.filament_used_grams = used
-        job.spool_id = spool.id
-        if spool.initial_weight_g:
-            job.filament_cost = (spool.cost / spool.initial_weight_g) * used
+        from app.services.filament import consume_for_job
+
+        await consume_for_job(db, spool, job, printer)
         if spool.remaining_weight_g <= spool.low_stock_threshold_g:
             await notify(
                 db,
                 NotificationType.filament_low,
-                f"Low filament: {spool.name}",
+                f"Low filament: {spool.public_code or spool.name}",
                 f"{spool.remaining_weight_g:.0f} g remaining of {spool.material} {spool.color} on {printer.name}.",
                 severity="warning",
                 entity_type="spool",
@@ -374,25 +371,31 @@ async def printer_allowed_for_job(db: AsyncSession, job: PrintJob, printer: Prin
 
 
 async def spool_sufficient(db: AsyncSession, printer: Printer, job: PrintJob) -> bool:
-    if not printer.assigned_spool_id or not job.estimated_filament_grams:
+    from app.models import GCodeFile
+    from app.services.filament import job_filament_check
+
+    spool = await db.get(FilamentSpool, printer.assigned_spool_id) if printer.assigned_spool_id else None
+    gcode = await db.get(GCodeFile, job.gcode_file_id) if job.gcode_file_id else None
+    check = job_filament_check(job, printer, spool, gcode)
+    job.filament_required_g = check["required_g"]
+    job.filament_available_g = check["available_g"]
+    if check["ok"]:
+        if job.hold_reason == "insufficient_filament":
+            job.hold_reason = None
         return True
-    spool = await db.get(FilamentSpool, printer.assigned_spool_id)
-    if not spool:
-        return True
-    if spool.remaining_weight_g < job.estimated_filament_grams * 1.08:
-        if not await recently_notified(db, NotificationType.filament_low.value, printer.id, hours=6):
-            await notify(
-                db,
-                NotificationType.filament_low,
-                f"{printer.name}: spool may not have enough filament",
-                f"{spool.name} has {spool.remaining_weight_g:.0f} g; job needs ~{job.estimated_filament_grams:.0f} g.",
-                severity="warning",
-                entity_type="printer",
-                entity_id=printer.id,
-                ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name, job_id=job.id),
-            )
-        return False
-    return True
+    job.hold_reason = "insufficient_filament"
+    if not await recently_notified(db, NotificationType.filament_low.value, printer.id, hours=6):
+        await notify(
+            db,
+            NotificationType.filament_low,
+            f"{printer.name}: insufficient filament",
+            " ".join(check["reasons"]),
+            severity="warning",
+            entity_type="printer",
+            entity_id=printer.id,
+            ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name, job_id=job.id),
+        )
+    return False
 
 
 async def start_job_on_printer(db: AsyncSession, job: PrintJob, printer: Printer) -> None:
@@ -505,6 +508,7 @@ async def tick(db: AsyncSession) -> None:
             await poll_live_printer(db, printer)
     await _maybe_notify_maintenance(db, printers)
     await assign_jobs(db)
+    await _maybe_reorder(db)
 
 
 async def _maybe_notify_maintenance(db: AsyncSession, printers: list[Printer]) -> None:
@@ -539,3 +543,22 @@ async def _maybe_notify_maintenance(db: AsyncSession, printers: list[Printer]) -
             entity_id=printer.id,
             ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
         )
+
+
+async def _maybe_reorder(db: AsyncSession) -> None:
+    from datetime import datetime, timezone
+
+    from app.models import AppSetting
+    from app.services.reorder import run_reorder_pass
+
+    row = await db.get(AppSetting, "filament_reorder_last")
+    last = None
+    if row and isinstance(row.value, dict) and row.value.get("at"):
+        try:
+            last = datetime.fromisoformat(str(row.value["at"]).replace("Z", "+00:00"))
+        except ValueError:
+            last = None
+    now = utcnow()
+    if last and (now - last).total_seconds() < 60:
+        return
+    await run_reorder_pass(db)

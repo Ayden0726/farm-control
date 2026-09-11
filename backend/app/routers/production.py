@@ -95,6 +95,18 @@ async def get_run(run_id: UUID, db: AsyncSession = Depends(get_db), _: User = De
     return run_out(run)
 
 
+@router.get("/{run_id}/filament-check")
+async def run_filament_check(run_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    from app.services.filament import production_filament_check
+
+    run = (
+        await db.execute(select(ProductionRun).options(*_LOAD).where(ProductionRun.id == run_id))
+    ).scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Production run not found")
+    return await production_filament_check(db, run)
+
+
 @router.post("/{run_id}/pause", response_model=ProductionRunOut)
 async def pause_run(run_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     run = await db.get(ProductionRun, run_id)

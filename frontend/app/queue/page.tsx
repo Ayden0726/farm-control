@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Job, Printer } from "@/lib/types";
@@ -76,7 +77,12 @@ export default function QueuePage() {
               </TableCell>
               <TableCell>
                 <StatusPill status={job.status} />
-                {job.fail_reason && <div className="mt-1 max-w-[180px] text-[11px] text-red-300">{job.fail_reason}</div>}
+                  {job.hold_reason === "insufficient_filament" && (
+                    <div className="mt-1 max-w-[220px] text-[11px] text-amber-200">
+                      Insufficient filament
+                      {job.filament_required_g ? `: need ${Math.round(job.filament_required_g)} g, have ${Math.round(job.filament_available_g)} g` : ""}
+                    </div>
+                  )}
               </TableCell>
               <TableCell className="font-mono text-xs">
                 {job.progress_percent.toFixed(0)}%
@@ -127,7 +133,16 @@ export default function QueuePage() {
                       ))}
                     </select>
                   )}
-                  <QrDialog kind="job" token={job.qr_token} label={job.gcode_filename || "Job"} />
+                  {job.hold_reason === "insufficient_filament" && (
+                    <>
+                      <Button size="xs" variant="outline" onClick={() => act(job.id, "override-filament")}>
+                        Override
+                      </Button>
+                      <Link href="/scan" className="inline-flex h-6 items-center rounded-md border border-input px-2 text-[11px]">
+                        Change spool
+                      </Link>
+                    </>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

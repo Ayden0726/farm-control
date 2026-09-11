@@ -10,18 +10,21 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.config import get_settings
-from app.db import engine
+from app.db import SessionLocal, engine
 from app.schema_upgrade import upgrade_schema
 from app.routers.auth import router as auth_router
 from app.routers.catalog import gcode_router, parts_router, stl_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.filament import router as filament_router
+from app.routers.filament_ops import router as filament_ops_router
 from app.routers.inventory import router as inventory_router
+from app.routers.labels import router as labels_router
 from app.routers.notify_api import router as notify_router
 from app.routers.orders import router as orders_router
 from app.routers.printers import router as printers_router
 from app.routers.production import router as production_router
 from app.routers.products import router as products_router
+from app.routers.purchasing import router as purchasing_router
 from app.routers.queue import router as queue_router
 from app.routers.misc import analytics_router, maint_router, qr_router, scan_router, settings_router
 from app.util import configure_logging
@@ -66,6 +69,13 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     async with engine.begin() as conn:
         await conn.run_sync(upgrade_schema)
+    async with SessionLocal() as db:
+        from app.seed_filament import ensure_filament_system
+        from app.services.notifications import ensure_defaults
+
+        await ensure_defaults(db)
+        await ensure_filament_system(db)
+        await db.commit()
     task = None
     if settings.run_scheduler:
         task = asyncio.create_task(_scheduler_loop())
@@ -111,7 +121,10 @@ def create_app() -> FastAPI:
     application.include_router(gcode_router, prefix=api)
     application.include_router(stl_router, prefix=api)
     application.include_router(inventory_router, prefix=api)
+    application.include_router(filament_ops_router, prefix=api)
     application.include_router(filament_router, prefix=api)
+    application.include_router(purchasing_router, prefix=api)
+    application.include_router(labels_router, prefix=api)
     application.include_router(products_router, prefix=api)
     application.include_router(orders_router, prefix=api)
     application.include_router(dashboard_router, prefix=api)

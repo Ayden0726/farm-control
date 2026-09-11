@@ -1,152 +1,183 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Spool } from "@/lib/types";
-import { StatusPill } from "@/components/status-pill";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FilamentNav } from "@/components/filament-nav";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatGrams, formatMoney } from "@/lib/format";
-import { QrDialog } from "@/components/qr-dialog";
-import { toast } from "sonner";
+import { ScanLine } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
-export default function FilamentPage() {
-  const [spools, setSpools] = useState<Spool[]>([]);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    manufacturer: "Sunlu",
-    material: "PETG",
-    color: "Black",
-    initial_weight_g: "1000",
-    cost: "24",
-    drying_status: "dry",
-  });
+type Dash = {
+  totals: {
+    physical_kg: number;
+    sealed_rolls: number;
+    open_rolls: number;
+    installed_rolls: number;
+    empty_rolls: number;
+    inventory_value: number;
+    avg_daily_g: number;
+    low_stock: number;
+  };
+  by_material: Record<string, number>;
+  by_color: Record<string, number>;
+  by_manufacturer: Record<string, number>;
+  products: {
+    product: { id: string; manufacturer: string; material: string; color: string; barcode_id: string };
+    stock: {
+      physical_kg: number;
+      sealed_rolls: number;
+      open_rolls: number;
+      installed_rolls: number;
+      committed_kg: number;
+      available_kg: number;
+      below_minimum: boolean;
+    };
+    recommend: { needed: boolean; rolls: number; reason: string };
+  }[];
+  recent_usage: { id: string; at: string; spool: string | null; amount_g: number; reason: string; printer: string | null }[];
+};
 
-  async function load() {
-    setSpools(await api<Spool[]>("/api/v1/filament"));
-  }
+function Kpi({ label, value, warn }: { label: string; value: string | number; warn?: boolean }) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-[#141a21] px-4 py-3">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">{label}</div>
+      <div className={`mt-1 font-mono text-2xl font-semibold ${warn ? "text-amber-300" : "text-zinc-50"}`}>{value}</div>
+    </div>
+  );
+}
+
+export default function FilamentDashboard() {
+  const [data, setData] = useState<Dash | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    load();
+    api<Dash>("/api/v1/filament/dashboard")
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
   }, []);
 
-  async function create(e: FormEvent) {
-    e.preventDefault();
-    try {
-      await api("/api/v1/filament", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          initial_weight_g: Number(form.initial_weight_g),
-          cost: Number(form.cost),
-        }),
-      });
-      toast.success("Spool added");
-      setOpen(false);
-      load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed");
-    }
-  }
+  if (error) return <div className="text-red-300">{error}</div>;
+  if (!data) return <div className="text-zinc-500">Loading filament inventory…</div>;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          PETG is the default material, but any polymer can be tracked. Usage is deducted when a print completes.
-        </p>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button />}>Add spool</DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add filament spool</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
-              {(
-                [
-                  ["name", "Name"],
-                  ["manufacturer", "Manufacturer"],
-                  ["material", "Material"],
-                  ["color", "Colour"],
-                  ["initial_weight_g", "Initial weight (g)"],
-                  ["cost", "Cost"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key} className="space-y-1">
-                  <Label>{label}</Label>
-                  <Input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} required />
-                </div>
-              ))}
-              <div className="space-y-1 sm:col-span-2">
-                <Label>Drying</Label>
-                <select
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                  value={form.drying_status}
-                  onChange={(e) => setForm({ ...form, drying_status: e.target.value })}
-                >
-                  <option value="dry">Dry</option>
-                  <option value="drying">Drying</option>
-                  <option value="needs_drying">Needs drying</option>
-                  <option value="unknown">Unknown</option>
-                </select>
-              </div>
-              <Button type="submit" className="sm:col-span-2">
-                Save spool
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Products are catalog types with reusable FarmOS barcodes. Physical rolls get unique SPOOL IDs when they arrive.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/scan" className={cn(buttonVariants({ size: "lg" }), "h-12 min-w-24 gap-2 text-base")}>
+            <ScanLine className="size-5" />
+            SCAN
+          </Link>
+          <Link href="/filament/receive" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12")}>
+            Receive Filament
+          </Link>
+        </div>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Spool</TableHead>
-            <TableHead>Material</TableHead>
-            <TableHead>Remaining</TableHead>
-            <TableHead>Cost / kg</TableHead>
-            <TableHead>Printer</TableHead>
-            <TableHead>Drying</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {spools.map((s) => (
-            <TableRow key={s.id} className={s.is_low ? "bg-amber-500/5" : ""}>
-              <TableCell>
-                <div className="font-medium">{s.name}</div>
-                <div className="text-xs text-zinc-500">
-                  {s.manufacturer} · {s.color}
-                </div>
-              </TableCell>
-              <TableCell>{s.material}</TableCell>
-              <TableCell className={s.is_low ? "text-amber-300" : ""}>
-                {formatGrams(s.remaining_weight_g)} / {formatGrams(s.initial_weight_g)}
-              </TableCell>
-              <TableCell>{formatMoney(s.cost_per_kg)}</TableCell>
-              <TableCell>{s.assigned_printer_name || "—"}</TableCell>
-              <TableCell>
-                <StatusPill status={s.drying_status} />
-              </TableCell>
-              <TableCell className="flex gap-1">
-                <QrDialog kind="spool" token={s.qr_token} label={s.name} />
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={async () => {
-                    await api(`/api/v1/filament/${s.id}/archive`, { method: "POST" });
-                    load();
-                  }}
-                >
-                  Archive
-                </Button>
-              </TableCell>
-            </TableRow>
+      <FilamentNav />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+        <Kpi label="Total filament" value={`${data.totals.physical_kg.toFixed(1)} kg`} />
+        <Kpi label="Sealed rolls" value={data.totals.sealed_rolls} />
+        <Kpi label="Open rolls" value={data.totals.open_rolls} />
+        <Kpi label="On printers" value={data.totals.installed_rolls} />
+        <Kpi label="Empty rolls" value={data.totals.empty_rolls} />
+        <Kpi label="Inventory value" value={formatMoney(data.totals.inventory_value)} />
+        <Kpi label="Avg daily use" value={formatGrams(data.totals.avg_daily_g)} />
+        <Kpi label="Low stock" value={data.totals.low_stock} warn={data.totals.low_stock > 0} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>By material</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {Object.entries(data.by_material).map(([k, v]) => (
+              <div key={k} className="flex justify-between">
+                <span>{k}</span>
+                <span className="font-mono">{v.toFixed(1)} kg</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>By colour</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {Object.entries(data.by_color).map(([k, v]) => (
+              <div key={k} className="flex justify-between">
+                <span>{k}</span>
+                <span className="font-mono">{v.toFixed(1)} kg</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>By manufacturer</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {Object.entries(data.by_manufacturer).map(([k, v]) => (
+              <div key={k} className="flex justify-between">
+                <span>{k}</span>
+                <span className="font-mono">{v.toFixed(1)} kg</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {data.products.map((row) => (
+          <Link key={row.product.id} href={`/filament/products/${row.product.id}`}>
+            <Card className={row.stock.below_minimum ? "border-amber-500/40" : ""}>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {row.product.color} {row.product.material}
+                </CardTitle>
+                <p className="text-xs text-zinc-500">
+                  {row.product.manufacturer} · {row.product.barcode_id}
+                </p>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-2 font-mono text-sm">
+                <span>Physical {row.stock.physical_kg.toFixed(1)} kg</span>
+                <span>Sealed {row.stock.sealed_rolls}</span>
+                <span>Open {row.stock.open_rolls}</span>
+                <span>Installed {row.stock.installed_rolls}</span>
+                <span>Committed {row.stock.committed_kg.toFixed(1)} kg</span>
+                <span className={row.stock.below_minimum ? "text-amber-300" : ""}>
+                  Available {row.stock.available_kg.toFixed(1)} kg
+                </span>
+                {row.recommend.needed && (
+                  <span className="col-span-2 text-xs text-amber-200">Reorder {row.recommend.rolls} rolls</span>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent filament usage</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {data.recent_usage.length === 0 && <p className="text-zinc-500">No usage transactions yet.</p>}
+          {data.recent_usage.map((u) => (
+            <div key={u.id} className="flex justify-between gap-3">
+              <span>
+                {u.spool || "spool"} · {u.reason}
+                {u.printer ? ` · ${u.printer}` : ""}
+              </span>
+              <span className="font-mono">{formatGrams(u.amount_g)}</span>
+            </div>
           ))}
-        </TableBody>
-      </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

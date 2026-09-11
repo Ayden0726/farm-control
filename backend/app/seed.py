@@ -97,6 +97,7 @@ async def seed_demo(db: AsyncSession) -> None:
             material=material,
             estimated_time_seconds=seconds,
             estimated_filament_grams=grams,
+            required_color="Black" if material == "PETG" else "Grey",
             version=1,
             notes="Demo library file. Replace with production-sliced G-code when ready.",
             file_size_bytes=path.stat().st_size,
@@ -548,4 +549,7 @@ async def seed_demo(db: AsyncSession) -> None:
         )
     )
     await ensure_defaults(db)
+    from app.seed_filament import ensure_filament_system
+
+    await ensure_filament_system(db, demo_rich=True)
     await db.flush()

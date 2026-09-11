@@ -63,6 +63,10 @@ export type Job = {
   estimated_time_seconds: number;
   qr_token: string;
   created_at: string;
+  filament_override?: boolean;
+  hold_reason?: string | null;
+  filament_required_g?: number;
+  filament_available_g?: number;
 };
 
 export type RunItem = {

@@ -98,6 +98,9 @@ class PrinterOut(BaseModel):
     maintenance_notes: str
     qr_token: str
     hours_until_maintenance: float | None = None
+    public_code: str | None = None
+    assigned_spool_code: str | None = None
+    assigned_spool_remaining_g: float | None = None
 
 
 class PartIn(BaseModel):
@@ -260,6 +263,13 @@ class JobOut(BaseModel):
     estimated_time_seconds: int
     qr_token: str
     created_at: datetime
+    filament_override: bool = False
+    hold_reason: str | None = None
+    filament_required_g: float = 0
+    filament_available_g: float = 0
+    required_material: str | None = None
+    required_color: str | None = None
+    spool_code: str | None = None
 
 
 class JobAction(BaseModel):
@@ -323,6 +333,13 @@ class SpoolOut(BaseModel):
     is_archived: bool
     notes: str
     is_low: bool = False
+    public_code: str | None = None
+    product_id: UUID | None = None
+    barcode_id: str | None = None
+    is_sealed: bool = True
+    is_empty: bool = False
+    consumed_g: float = 0
+    location_name: str | None = None
 
 
 class OrderLineIn(BaseModel):
@@ -415,6 +432,8 @@ class BinOut(BaseModel):
     part_id: UUID | None
     part_sku: str | None = None
     qr_token: str
+    public_code: str | None = None
+    kind: str = "finished_part"
 
 
 class SettingsOut(BaseModel):

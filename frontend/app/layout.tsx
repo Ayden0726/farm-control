@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Gate } from "@/components/gate";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PwaRegister } from "@/components/pwa-register";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -18,6 +19,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "RackKit FarmOS",
   description: "Production control for the RackKit 3D-printing farm.",
+  applicationName: "RackKit FarmOS",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "FarmOS" },
+  themeColor: "#d97706",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -27,6 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <TooltipProvider>
           <Gate>{children}</Gate>
           <Toaster />
+          <PwaRegister />
         </TooltipProvider>
       </body>
     </html>

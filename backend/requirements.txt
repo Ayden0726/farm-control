@@ -15,6 +15,7 @@ python-multipart==0.0.20
 segno==1.6.6
 qrcode==8.0
 pillow==11.1.0
+python-barcode==0.15.1
 greenlet==3.1.1
 email-validator==2.2.0
 psycopg2-binary==2.9.10

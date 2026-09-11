@@ -109,6 +109,19 @@ Open RackKit FarmOS to clear the bed and start the next queued job.
 
 The notification includes a button/link into that printer so the operator can confirm bed clear. Delivery history (time, event, printer, job, provider, sent/failed) lives under **Notifications**. Failed sends are logged there instead of being dropped.
 
+## Filament inventory and FarmOS barcodes
+
+Manufacturer barcodes are **not** used. FarmOS generates its own codes:
+
+- **Product / receiving barcode** (`FILT-SID-PETG-BLACK-3KG`) — reusable QR + Code 128. Print these before any stock arrives. Scan the same label every time more of that filament shows up.
+- **Spool QR** (`SPOOL-000142`) — unique, created when rolls are received, then stuck on that physical roll.
+
+Workflow: create a filament type → **Print Receiving Barcode** (or **Inventory Labels** sheets) → when a box arrives, **Receive Filament** on a phone, scan the FarmOS label, enter quantity and price → FarmOS creates one spool record per roll and offers **Print All Spool Labels**.
+
+Purchase orders can be received from the PO itself without scanning. Reorder modes: Off, Suggest only, **Create purchase order** (default), Approve and order, Full auto (architected, **disabled** unless spending controls explicitly enable it). Available stock = physical − committed (queue, current prints, production runs, waiting orders).
+
+Phone **SCAN** uses the camera (QR and Code 128) with manual entry as fallback. Add FarmOS to the home screen as a PWA.
+
 ## Backups
 
 ```bash
