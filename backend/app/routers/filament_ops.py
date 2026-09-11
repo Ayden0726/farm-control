@@ -676,13 +676,11 @@ async def list_audit(limit: int = 100, db: AsyncSession = Depends(get_db), _: Us
     ]
 
 
-@router.get("/identify/{code}")
-async def identify_code(code: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
-    from app.services.barcodes import resolve_code
+class LookupIn(BaseModel):
+    code: str = Field(min_length=1, max_length=120)
 
-    hit = await resolve_code(db, code)
-    if not hit:
-        raise HTTPException(404, "Unknown FarmOS code")
+
+def _identify_payload(hit: dict[str, Any]) -> dict[str, Any]:
     kind, row = hit["kind"], hit["row"]
     if kind == "product":
         return {
@@ -733,3 +731,22 @@ async def identify_code(code: str, db: AsyncSession = Depends(get_db), _: User =
     if kind == "job":
         return {"kind": "job", "id": str(row.id), "path": "/queue", "actions": []}
     raise HTTPException(404, "Unknown FarmOS code")
+
+
+async def _resolve_identify(db: AsyncSession, code: str) -> dict[str, Any]:
+    from app.services.barcodes import resolve_code
+
+    hit = await resolve_code(db, code.strip())
+    if not hit:
+        raise HTTPException(404, "Unknown FarmOS code")
+    return _identify_payload(hit)
+
+
+@router.post("/lookup")
+async def lookup_code(payload: LookupIn, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    return await _resolve_identify(db, payload.code)
+
+
+@router.get("/identify/{code}")
+async def identify_code(code: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    return await _resolve_identify(db, code)

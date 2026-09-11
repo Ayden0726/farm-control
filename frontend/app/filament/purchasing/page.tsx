@@ -50,11 +50,26 @@ export default function PurchasingPage() {
   const [rows, setRows] = useState<PO[]>([]);
   const [status, setStatus] = useState("");
   const [spend, setSpend] = useState<Spend | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const q = status ? `?status=${status}` : "";
-    setRows(await api<PO[]>(`/api/v1/purchasing${q}`));
-    setSpend(await api<Spend>("/api/v1/purchasing/spend"));
+    setLoading(true);
+    setError(null);
+    try {
+      const q = status ? `?status=${encodeURIComponent(status)}` : "";
+      const [list, spendData] = await Promise.all([
+        api<PO[]>(`/api/v1/purchasing${q}`),
+        api<Spend>("/api/v1/purchasing/spend"),
+      ]);
+      setRows(Array.isArray(list) ? list : []);
+      setSpend(spendData);
+    } catch (err) {
+      setRows([]);
+      setError(err instanceof Error ? err.message : "Could not load purchasing");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     load();
@@ -72,8 +87,12 @@ export default function PurchasingPage() {
 
   async function saveSpend() {
     if (!spend) return;
-    await api("/api/v1/purchasing/spend", { method: "PUT", body: JSON.stringify(spend) });
-    toast.success("Spending controls saved. Full Auto stays off unless you enable it here.");
+    try {
+      await api("/api/v1/purchasing/spend", { method: "PUT", body: JSON.stringify(spend) });
+      toast.success("Spending controls saved. Full Auto stays off unless you enable it here.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save spending controls");
+    }
   }
 
   return (
@@ -113,10 +132,10 @@ export default function PurchasingPage() {
           {rows.map((p) => (
             <TableRow key={p.id}>
               <TableCell className="font-mono text-xs">{p.reference}</TableCell>
-              <TableCell>{p.status.replaceAll("_", " ")}</TableCell>
+              <TableCell>{(p.status || "").replaceAll("_", " ")}</TableCell>
               <TableCell>{p.supplier_name || "—"}</TableCell>
-              <TableCell className="text-xs">{p.lines.map((l) => l.filament).join(", ")}</TableCell>
-              <TableCell>{p.lines.map((l) => `${l.quantity_ordered} × ${l.spool_size_label || ""}`).join(", ")}</TableCell>
+              <TableCell className="text-xs">{(p.lines ?? []).map((l) => l.filament).join(", ")}</TableCell>
+              <TableCell>{(p.lines ?? []).map((l) => `${l.quantity_ordered} × ${l.spool_size_label || ""}`).join(", ")}</TableCell>
               <TableCell>{formatMoney(p.total)}</TableCell>
               <TableCell>
                 <Link href={`/filament/purchasing/${p.id}`} className="text-xs text-amber-300 hover:underline">
@@ -127,7 +146,18 @@ export default function PurchasingPage() {
           ))}
         </TableBody>
       </Table>
-      {rows.length === 0 && <p className="text-sm text-zinc-500">No purchase orders in this filter.</p>}
+      {loading && <p className="text-sm text-zinc-500">Loading purchase orders…</p>}
+      {error && (
+        <p className="text-sm text-red-300">
+          {error}{" "}
+          <button type="button" className="underline" onClick={() => load()}>
+            Retry
+          </button>
+        </p>
+      )}
+      {!loading && !error && rows.length === 0 && (
+        <p className="text-sm text-zinc-500">No purchase orders in this filter.</p>
+      )}
       {spend && (
         <Card>
           <CardHeader>

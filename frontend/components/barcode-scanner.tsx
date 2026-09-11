@@ -1,8 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+function safeStop(scanner: { stop: () => Promise<void> } | null) {
+  if (!scanner) return;
+  try {
+    const pending = scanner.stop();
+    if (pending && typeof pending.catch === "function") {
+      pending.catch(() => undefined);
+    }
+  } catch {
+    // html5-qrcode throws a string if the camera never started.
+  }
+}
 
 export function BarcodeScanner({
   onDetect,
@@ -11,6 +23,8 @@ export function BarcodeScanner({
   onDetect: (code: string) => void;
   label?: string;
 }) {
+  const uid = useId().replace(/:/g, "");
+  const elementId = `farmos-scanner-${uid}`;
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
@@ -40,22 +54,32 @@ export function BarcodeScanner({
           },
           () => undefined,
         );
-        if (!cancelled) setRunning(true);
+        if (cancelled) {
+          safeStop(scanner);
+          scannerRef.current = null;
+          return;
+        }
+        setRunning(true);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Camera unavailable. Enter the code manually.");
+        scannerRef.current = null;
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Camera unavailable. Enter the code manually.");
+        }
       }
     }
     start();
     return () => {
       cancelled = true;
-      scannerRef.current?.stop().catch(() => undefined);
+      const scanner = scannerRef.current;
+      scannerRef.current = null;
+      safeStop(scanner);
     };
   }, []);
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <div id="farmos-scanner" ref={host} className="overflow-hidden rounded-xl bg-black min-h-[220px]" />
+      <div id={elementId} ref={host} className="overflow-hidden rounded-xl bg-black min-h-[220px]" />
       {error && <p className="text-sm text-amber-200">{error}</p>}
       {running && <p className="text-xs text-zinc-500">Camera live — QR and Code 128 are both accepted.</p>}
       <form

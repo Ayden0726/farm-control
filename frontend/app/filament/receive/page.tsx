@@ -44,7 +44,10 @@ function ReceiveInner() {
 
   const identify = useCallback(async (code: string) => {
     try {
-      const hit = await api<Identified>(`/api/v1/filament/identify/${encodeURIComponent(code)}`);
+      const hit = await api<Identified>("/api/v1/filament/lookup", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
       if (hit.kind !== "product") {
         toast.error("Scan a reusable product barcode (FILT-…), not a unique spool QR.");
         return;
@@ -90,7 +93,9 @@ function ReceiveInner() {
       <p className="text-sm text-muted-foreground">
         Scan the FarmOS receiving barcode you printed for this product. The same code is reused every time more of this filament arrives.
       </p>
-      {!product && <BarcodeScanner onDetect={identify} />}
+      <div className={product || done ? "hidden" : undefined}>
+        <BarcodeScanner onDetect={identify} />
+      </div>
       {product && !done && (
         <Card>
           <CardHeader>

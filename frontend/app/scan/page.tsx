@@ -38,7 +38,10 @@ export default function ScanHubPage() {
   const onDetect = useCallback(
     async (code: string) => {
       try {
-        const hit = await api<Hit>(`/api/v1/filament/identify/${encodeURIComponent(code)}`);
+        const hit = await api<Hit>("/api/v1/filament/lookup", {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        });
         if (action === "receive") {
           if (hit.kind !== "product") {
             toast.error("Scan a FarmOS product barcode (FILT-…), not a spool QR.");
@@ -123,13 +126,15 @@ export default function ScanHubPage() {
           ))}
         </div>
       )}
-      {action && !confirm && (
+      {action && (
         <div className="space-y-3">
-          <Button variant="ghost" onClick={() => { setAction(null); setPrinter(null); }}>
+          <Button variant="ghost" onClick={() => { setAction(null); setPrinter(null); setConfirm(null); }}>
             Back
           </Button>
-          {printer && <p className="text-sm text-amber-200">Printer: {printer.name}. Scan the spool.</p>}
-          <BarcodeScanner onDetect={onDetect} />
+          <div className={confirm ? "hidden" : undefined}>
+            {printer && <p className="text-sm text-amber-200">Printer: {printer.name}. Scan the spool.</p>}
+            <BarcodeScanner onDetect={onDetect} />
+          </div>
         </div>
       )}
       {confirm && (

@@ -48,13 +48,21 @@ export default function PurchaseOrderPage() {
   const [recvQty, setRecvQty] = useState("");
   const [printPath, setPrintPath] = useState<string | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
+
   async function load() {
-    const row = await api<PO>(`/api/v1/purchasing/${params.id}`);
-    setPo(row);
-    if (row.lines[0]) {
-      setQty(String(row.lines[0].quantity_ordered));
-      setPrice(String(row.lines[0].unit_price));
-      setRecvQty(String(row.lines[0].outstanding || row.lines[0].quantity_ordered));
+    try {
+      setError(null);
+      const row = await api<PO>(`/api/v1/purchasing/${params.id}`);
+      row.lines = row.lines ?? [];
+      setPo(row);
+      if (row.lines[0]) {
+        setQty(String(row.lines[0].quantity_ordered));
+        setPrice(String(row.lines[0].unit_price));
+        setRecvQty(String(row.lines[0].outstanding || row.lines[0].quantity_ordered));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load this purchase order");
     }
   }
   useEffect(() => {
@@ -80,8 +88,19 @@ export default function PurchaseOrderPage() {
     }
   }
 
+  if (error) {
+    return (
+      <div className="space-y-3">
+        <FilamentNav />
+        <p className="text-sm text-red-300">{error}</p>
+        <Button variant="outline" onClick={() => load()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
   if (!po) return <div className="text-zinc-500">Loading purchase order…</div>;
-  const line = po.lines[0];
+  const line = (po.lines ?? [])[0];
 
   return (
     <div className="space-y-4">
