@@ -4,7 +4,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-function safeStop(scanner: { stop: () => Promise<void> } | null) {
+type Stoppable = { stop: () => Promise<void> };
+
+function safeStop(scanner: Stoppable | null) {
   if (!scanner) return;
   try {
     const pending = scanner.stop();
@@ -14,6 +16,23 @@ function safeStop(scanner: { stop: () => Promise<void> } | null) {
   } catch {
     // html5-qrcode throws a string if the camera never started.
   }
+}
+
+function patchStop(Ctor: { prototype: { stop: () => Promise<void> } }) {
+  const proto = Ctor.prototype as { stop: (() => Promise<void>) & { __farmosSafe?: boolean } };
+  if (proto.stop.__farmosSafe) return;
+  const original = proto.stop;
+  const wrapped = function (this: Stoppable) {
+    try {
+      const pending = original.call(this);
+      if (pending && typeof pending.catch === "function") return pending.catch(() => undefined);
+      return Promise.resolve();
+    } catch {
+      return Promise.resolve();
+    }
+  } as (() => Promise<void>) & { __farmosSafe?: boolean };
+  wrapped.__farmosSafe = true;
+  proto.stop = wrapped;
 }
 
 export function BarcodeScanner({
@@ -29,16 +48,19 @@ export function BarcodeScanner({
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
   const [running, setRunning] = useState(false);
+  const [wantCamera, setWantCamera] = useState(false);
   const onDetectRef = useRef(onDetect);
   onDetectRef.current = onDetect;
-  const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
+  const scannerRef = useRef<Stoppable | null>(null);
 
   useEffect(() => {
+    if (!wantCamera) return;
     let cancelled = false;
     async function start() {
       if (!host.current) return;
       try {
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        patchStop(Html5Qrcode);
         const scanner = new Html5Qrcode(host.current.id);
         scannerRef.current = scanner;
         const config = {
@@ -74,12 +96,23 @@ export function BarcodeScanner({
       scannerRef.current = null;
       safeStop(scanner);
     };
-  }, []);
+  }, [wantCamera]);
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <div id={elementId} ref={host} className="overflow-hidden rounded-xl bg-black min-h-[220px]" />
+      {wantCamera ? (
+        <div id={elementId} ref={host} className="overflow-hidden rounded-xl bg-black min-h-[220px]" />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setWantCamera(true)}
+          className="flex min-h-[140px] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/40 px-4 text-center"
+        >
+          <span className="text-sm font-medium text-zinc-200">Use camera</span>
+          <span className="mt-1 text-xs text-zinc-500">QR and Code 128. Skip this on a desktop without a camera.</span>
+        </button>
+      )}
       {error && <p className="text-sm text-amber-200">{error}</p>}
       {running && <p className="text-xs text-zinc-500">Camera live — QR and Code 128 are both accepted.</p>}
       <form
