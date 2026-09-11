@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { FilamentNav } from "@/components/filament-nav";
+import { AddRollsPanel } from "@/components/add-rolls-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatGrams, formatMoney } from "@/lib/format";
+import { formatGrams } from "@/lib/format";
+import { labelsPrintHref } from "@/lib/labels";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +44,7 @@ type Detail = {
   approval_required: boolean;
   max_po_amount: number;
   preferred_supplier_name: string | null;
+  preferred_supplier_id?: string | null;
   stock: {
     physical_kg: number;
     committed_kg: number;
@@ -55,8 +58,9 @@ type Detail = {
   spools: { id: string; public_code: string; remaining_weight_g: number; is_sealed: boolean; assigned_printer_name: string | null; location_name: string | null }[];
 };
 
-export default function ProductDetailPage() {
+function ProductDetailInner() {
   const params = useParams<{ id: string }>();
+  const search = useSearchParams();
   const [row, setRow] = useState<Detail | null>(null);
 
   async function load() {
@@ -66,7 +70,7 @@ export default function ProductDetailPage() {
     load();
   }, [params.id]);
 
-  if (!row) return <div className="text-zinc-500">Loading product…</div>;
+  if (!row) return <div className="text-zinc-500">Loading filament profile…</div>;
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -99,8 +103,8 @@ export default function ProductDetailPage() {
           reorder_mode: String(fd.get("reorder_mode")),
           approval_required: fd.get("approval_required") === "on",
           max_po_amount: Number(fd.get("max_po_amount")),
-          nozzle_temp_c: current.nozzle_temp_c,
-          bed_temp_c: current.bed_temp_c,
+          nozzle_temp_c: fd.get("nozzle_temp_c") ? Number(fd.get("nozzle_temp_c")) : current.nozzle_temp_c,
+          bed_temp_c: fd.get("bed_temp_c") ? Number(fd.get("bed_temp_c")) : current.bed_temp_c,
         }),
       });
       toast.success("Reorder settings saved");
@@ -118,18 +122,18 @@ export default function ProductDetailPage() {
           <h2 className="text-xl font-semibold">
             {row.manufacturer} {row.material} — {row.color}
           </h2>
+          <p className="text-sm text-zinc-400">Filament profile · {row.spool_size_label}</p>
           <p className="font-mono text-sm text-amber-200">{row.barcode_id}</p>
-          <p className="text-sm text-zinc-500">{row.spool_size_label} · reusable receiving barcode</p>
+          <p className="text-sm text-zinc-500">
+            Saved once. New rolls inherit manufacturer, material, colour, size, supplier, and temperatures.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href={`/labels/print?kind=product&ids=${row.id}&copies=1`}
-            className={cn(buttonVariants(), "h-11")}
+            href={labelsPrintHref("product", [row.id], { layout: "one", auto: true })}
+            className={cn(buttonVariants({ variant: "outline" }), "h-11")}
           >
             Print Receiving Barcode
-          </Link>
-          <Link href={`/filament/receive?code=${encodeURIComponent(row.barcode_id)}`} className={cn(buttonVariants({ variant: "outline" }), "h-11")}>
-            Receive stock
           </Link>
           {row.supplier_url && (
             <a href={row.supplier_url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "outline" }), "h-11")}>
@@ -138,6 +142,11 @@ export default function ProductDetailPage() {
           )}
         </div>
       </div>
+      <AddRollsPanel
+        product={row}
+        defaultOpen={search.get("add") === "1" || row.spools.length === 0}
+        onCreated={load}
+      />
       <div className="grid gap-3 md:grid-cols-4">
         <Card>
           <CardHeader>
@@ -190,7 +199,9 @@ export default function ProductDetailPage() {
                 { name: "reorder_multiple", label: "Reorder multiple", value: row.reorder_multiple },
                 { name: "lead_time_days", label: "Lead time (days)", value: row.lead_time_days },
                 { name: "max_po_amount", label: "Max PO amount", value: row.max_po_amount },
-              ] as { name: string; label: string; value: number }[]
+                { name: "nozzle_temp_c", label: "Nozzle °C", value: row.nozzle_temp_c ?? "" },
+                { name: "bed_temp_c", label: "Bed °C", value: row.bed_temp_c ?? "" },
+              ] as { name: string; label: string; value: number | string }[]
             ).map((field) => (
               <div key={field.name} className="space-y-1">
                 <Label>{field.label}</Label>
@@ -232,17 +243,32 @@ export default function ProductDetailPage() {
           <CardTitle>Physical rolls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {row.spools.length === 0 && <p className="text-zinc-500">No rolls received yet. Print the receiving barcode and scan it when stock arrives.</p>}
+          {row.spools.length === 0 && (
+            <p className="text-zinc-500">No physical rolls yet. Use Add New Rolls — FarmOS assigns the next SPOOL numbers automatically.</p>
+          )}
           {row.spools.map((s) => (
-            <Link key={s.id} href={`/filament/spools/${s.id}`} className="flex justify-between rounded-md bg-white/5 px-3 py-2 hover:bg-white/10">
-              <span className="font-mono">{s.public_code}</span>
-              <span>
-                {formatGrams(s.remaining_weight_g)} · {s.is_sealed ? "Sealed" : "Open"} · {s.assigned_printer_name || s.location_name || "—"}
-              </span>
-            </Link>
+            <div key={s.id} className="flex items-center justify-between gap-2 rounded-md bg-white/5 px-3 py-2">
+              <Link href={`/filament/spools/${s.id}`} className="flex min-w-0 flex-1 justify-between hover:text-amber-200">
+                <span className="font-mono">{s.public_code}</span>
+                <span className="truncate text-zinc-400">
+                  {formatGrams(s.remaining_weight_g)} · {s.is_sealed ? "Sealed" : "Open"} · {s.assigned_printer_name || s.location_name || "—"}
+                </span>
+              </Link>
+              <Link href={labelsPrintHref("spool", [s.id], { layout: "one", auto: true })} className="shrink-0 text-xs text-amber-300 hover:underline">
+                Reprint
+              </Link>
+            </div>
           ))}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function ProductDetailPage() {
+  return (
+    <Suspense fallback={<div className="text-zinc-500">Loading filament profile…</div>}>
+      <ProductDetailInner />
+    </Suspense>
   );
 }

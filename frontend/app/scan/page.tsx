@@ -21,7 +21,7 @@ type Hit = {
 };
 
 const ACTIONS = [
-  { id: "receive", label: "Receive filament", hint: "Scan a reusable FILT- product barcode" },
+  { id: "receive", label: "Receive filament", hint: "Scan a FILT- profile barcode to add new rolls" },
   { id: "find", label: "Find spool", hint: "Scan a unique SPOOL- QR" },
   { id: "assign", label: "Assign spool", hint: "Scan printer QR, then spool QR" },
   { id: "move", label: "Move spool", hint: "Scan a SPOOL- QR, then pick a location" },
@@ -47,7 +47,7 @@ export default function ScanHubPage() {
             toast.error("Scan a FarmOS product barcode (FILT-…), not a spool QR.");
             return;
           }
-          router.push(`/filament/receive?code=${encodeURIComponent(hit.barcode_id || code)}`);
+          router.push(`/filament/products/${hit.id}?add=1`);
           return;
         }
         if (action === "find" || action === "move") {

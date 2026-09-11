@@ -9,12 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatGrams, formatMoney } from "@/lib/format";
+import { labelsPrintHref } from "@/lib/labels";
 import { toast } from "sonner";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 type Spool = {
   id: string;
+  product_id: string | null;
   public_code: string;
   name: string;
   manufacturer: string;
@@ -95,19 +97,30 @@ export default function SpoolDetailPage() {
           <p>
             {spool.manufacturer} {spool.material} — {spool.color}
           </p>
+          {spool.product_id && (
+            <Link href={`/filament/products/${spool.product_id}`} className="text-sm text-amber-300 hover:underline">
+              Open filament profile
+            </Link>
+          )}
         </div>
-        <Link href={`/labels/print?kind=spool&ids=${spool.id}`} className={cn(buttonVariants(), "h-11")}>
-          Print spool QR
+        <Link href={labelsPrintHref("spool", [spool.id], { layout: "one", auto: true })} className={cn(buttonVariants(), "h-11")}>
+          Reprint Label
         </Link>
       </div>
-      <div className="grid gap-3 md:grid-cols-4 font-mono text-sm">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-5 font-mono text-sm">
         <Card><CardHeader><CardTitle>Remaining</CardTitle></CardHeader><CardContent>{formatGrams(spool.remaining_weight_g)}</CardContent></Card>
         <Card><CardHeader><CardTitle>Consumed</CardTitle></CardHeader><CardContent>{formatGrams(spool.consumed_g)}</CardContent></Card>
+        <Card><CardHeader><CardTitle>Paid at receive</CardTitle></CardHeader><CardContent>{formatMoney(spool.cost)}</CardContent></Card>
         <Card><CardHeader><CardTitle>Cost / kg</CardTitle></CardHeader><CardContent>{formatMoney(spool.cost_per_kg)}</CardContent></Card>
         <Card><CardHeader><CardTitle>Status</CardTitle></CardHeader><CardContent>{spool.is_empty ? "Empty" : spool.is_sealed ? "Sealed" : "Open"}</CardContent></Card>
       </div>
       <p className="text-sm text-zinc-400">
-        Location: {spool.location_name || "—"} · Printer: {spool.assigned_printer_name || "—"} · Drying: {spool.drying_status}
+        Received {spool.date_received ? new Date(spool.date_received).toLocaleDateString() : "—"}
+        {spool.purchase_date ? ` · purchased ${new Date(spool.purchase_date).toLocaleDateString()}` : ""}
+        · Location: {spool.location_name || "—"} · Printer: {spool.assigned_printer_name || "—"} · Drying: {spool.drying_status}
+      </p>
+      <p className="text-xs text-zinc-500">
+        This roll keeps the ${spool.cost.toFixed(2)} paid when it arrived, even if the profile’s normal price changes later.
       </p>
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">

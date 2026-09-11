@@ -111,16 +111,18 @@ The notification includes a button/link into that printer so the operator can co
 
 ## Filament inventory and FarmOS barcodes
 
-Manufacturer barcodes are **not** used. FarmOS generates its own codes:
+Manufacturer barcodes are **not** used. FarmOS generates its own codes, and filament information is entered **once** as a reusable **filament profile**:
 
-- **Product / receiving barcode** (`FILT-SID-PETG-BLACK-3KG`) — reusable QR + Code 128. Print these before any stock arrives. Scan the same label every time more of that filament shows up.
-- **Spool QR** (`SPOOL-000142`) — unique, created when rolls are received, then stuck on that physical roll.
+- **Filament profile** (`FILT-SID-PETG-BLACK-3KG`) — manufacturer, product, material, colour, spool size, supplier, normal cost, temperatures, and reorder settings. Print this barcode for the shelf or receiving bench.
+- **Physical spool** (`SPOOL-000142`) — one actual roll. Sequential numbers come from a locked database sequence and are never reused, including after a roll is emptied or archived.
 
-Workflow: create a filament type → **Print Receiving Barcode** (or **Inventory Labels** sheets) → when a box arrives, **Receive Filament** on a phone, scan the FarmOS label, enter quantity and price → FarmOS creates one spool record per roll and offers **Print All Spool Labels**.
+Workflow: create the profile once → later open that profile (or scan its FILT- barcode) → **Add New Rolls** → quantity, optional price, location → **Create Rolls**. FarmOS allocates the next SPOOL numbers and offers **Print All** / **Print Selected** (one per page, adhesive sheets, or a label printer). **Reprint Label** on an existing spool regenerates the same QR and number; it does not create a new roll.
+
+Each spool keeps the purchase price paid when it arrived, even if the profile’s normal price changes later.
 
 Purchase orders can be received from the PO itself without scanning. Reorder modes: Off, Suggest only, **Create purchase order** (default), Approve and order, Full auto (architected, **disabled** unless spending controls explicitly enable it). Available stock = physical − committed (queue, current prints, production runs, waiting orders).
 
-Phone **SCAN** uses the camera (QR and Code 128) with manual entry as fallback. Add FarmOS to the home screen as a PWA.
+Phone **SCAN** uses the camera (QR and Code 128) with manual entry as fallback. Scanning a profile barcode opens **Add New Rolls**. Add FarmOS to the home screen as a PWA.
 
 ## Backups
 

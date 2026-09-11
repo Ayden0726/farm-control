@@ -88,7 +88,7 @@ class ReceiveIn(BaseModel):
     product_id: UUID | None = None
     barcode: str | None = None
     quantity: int = Field(ge=1, le=500)
-    cost_per_spool: float = Field(ge=0)
+    cost_per_spool: float | None = Field(default=None, ge=0)
     supplier_id: UUID | None = None
     purchase_order_id: UUID | None = None
     location_id: UUID | None = None
@@ -470,12 +470,15 @@ async def receive_filament(
             product = hit["row"]
     if not product:
         raise HTTPException(400, "Scan a FarmOS receiving barcode or choose a filament product.")
+    cost = payload.cost_per_spool
+    if cost is None:
+        cost = product.normal_price or product.purchase_cost or 0
     try:
         spools = await create_spools_from_receive(
             db,
             product,
             payload.quantity,
-            payload.cost_per_spool,
+            cost,
             supplier_id=payload.supplier_id,
             purchase_order_id=payload.purchase_order_id,
             location_id=payload.location_id,
@@ -526,7 +529,7 @@ async def receive_filament(
     ).scalars().all()
     return {
         "ok": True,
-        "message": f"{len(loaded)} spools added successfully",
+        "message": f"{len(loaded)} New Rolls Created",
         "product": {
             "id": str(product.id),
             "barcode_id": product.barcode_id,
@@ -694,7 +697,7 @@ def _identify_payload(hit: dict[str, Any]) -> dict[str, Any]:
             "filament_weight_g": row.filament_weight_g,
             "preferred_supplier_id": str(row.preferred_supplier_id) if row.preferred_supplier_id else None,
             "purchase_cost": row.purchase_cost,
-            "path": f"/filament/products/{row.id}",
+            "path": f"/filament/products/{row.id}?add=1",
             "actions": ["receive"],
         }
     if kind == "spool":

@@ -43,6 +43,7 @@ def label_html_page(
     width_mm: float = 54,
     height_mm: float = 70,
     columns: int = 3,
+    layout: str = "sheet",
 ) -> str:
     items = []
     for card in cards:
@@ -52,7 +53,7 @@ def label_html_page(
             else ""
         )
         qr_img = f'<img class="qr" src="{card["qr_url"]}" alt="QR {card["code"]}" />'
-        lines = "".join(f"<div class='line'>{line}</div>" for line in card.get("lines", []))
+        lines = "".join(f"<div class='line'>{line}</div>" for line in card.get("lines", []) if line)
         items.append(
             f"""
             <article class="label">
@@ -64,21 +65,34 @@ def label_html_page(
             </article>
             """
         )
+    layout = (layout or "sheet").lower()
+    if layout == "one":
+        columns = 1
+        page_css = "@page { margin: 12mm; size: A4; }"
+        sheet_css = "display:block;"
+        label_extra = "page-break-after: always; width: 100%; max-width: 120mm; min-height: 90mm; margin: 0 auto 8mm;"
+    elif layout == "label":
+        columns = 1
+        page_css = f"@page {{ margin: 0; size: {width_mm}mm {height_mm}mm; }}"
+        sheet_css = "display:block;"
+        label_extra = (
+            f"page-break-after: always; border: none; width: {width_mm}mm; "
+            f"height: {height_mm}mm; min-height: {height_mm}mm;"
+        )
+    else:
+        page_css = "@page { margin: 8mm; size: auto; }"
+        sheet_css = f"display: grid; grid-template-columns: repeat({max(1, columns)}, {width_mm}mm); gap: 4mm; justify-content: start;"
+        label_extra = ""
     return f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>{title}</title>
   <style>
-    @page {{ margin: 8mm; size: auto; }}
+    {page_css}
     body {{ font-family: ui-sans-serif, system-ui, sans-serif; background: #fff; color: #111; margin: 0; }}
     h1 {{ font-size: 14px; margin: 0 0 8px; }}
-    .sheet {{
-      display: grid;
-      grid-template-columns: repeat({max(1, columns)}, {width_mm}mm);
-      gap: 4mm;
-      justify-content: start;
-    }}
+    .sheet {{ {sheet_css} }}
     .label {{
       width: {width_mm}mm;
       min-height: {height_mm}mm;
@@ -89,6 +103,7 @@ def label_html_page(
       flex-direction: column;
       gap: 1.5mm;
       page-break-inside: avoid;
+      {label_extra}
     }}
     .brand {{ font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: #555; }}
     .title {{ font-size: 13px; font-weight: 700; }}

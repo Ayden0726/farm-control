@@ -67,7 +67,7 @@ export default function FilamentDashboard() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            Products are catalog types with reusable FarmOS barcodes. Physical rolls get unique SPOOL IDs when they arrive.
+            Filament profiles are saved once. Add rolls from a profile — each physical roll gets the next unique SPOOL number.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -75,8 +75,8 @@ export default function FilamentDashboard() {
             <ScanLine className="size-5" />
             SCAN
           </Link>
-          <Link href="/filament/receive" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12")}>
-            Receive Filament
+          <Link href="/filament/products" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12")}>
+            Profiles
           </Link>
         </div>
       </div>
@@ -134,17 +134,19 @@ export default function FilamentDashboard() {
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {data.products.map((row) => (
-          <Link key={row.product.id} href={`/filament/products/${row.product.id}`}>
-            <Card className={row.stock.below_minimum ? "border-amber-500/40" : ""}>
-              <CardHeader>
-                <CardTitle className="text-base">
+          <Card key={row.product.id} className={row.stock.below_minimum ? "border-amber-500/40" : ""}>
+            <CardHeader>
+              <CardTitle className="text-base">
+                <Link href={`/filament/products/${row.product.id}`} className="hover:text-amber-200">
                   {row.product.color} {row.product.material}
-                </CardTitle>
-                <p className="text-xs text-zinc-500">
-                  {row.product.manufacturer} · {row.product.barcode_id}
-                </p>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-2 font-mono text-sm">
+                </Link>
+              </CardTitle>
+              <p className="text-xs text-zinc-500">
+                {row.product.manufacturer} · {row.product.barcode_id}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 font-mono text-sm">
                 <span>Physical {row.stock.physical_kg.toFixed(1)} kg</span>
                 <span>Sealed {row.stock.sealed_rolls}</span>
                 <span>Open {row.stock.open_rolls}</span>
@@ -156,9 +158,12 @@ export default function FilamentDashboard() {
                 {row.recommend.needed && (
                   <span className="col-span-2 text-xs text-amber-200">Reorder {row.recommend.rolls} rolls</span>
                 )}
-              </CardContent>
-            </Card>
-          </Link>
+              </div>
+              <Link href={`/filament/products/${row.product.id}?add=1`} className={cn(buttonVariants(), "flex h-11 w-full items-center justify-center")}>
+                Add Rolls
+              </Link>
+            </CardContent>
+          </Card>
         ))}
       </div>
       <Card>

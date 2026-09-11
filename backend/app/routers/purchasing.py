@@ -464,7 +464,7 @@ async def receive_po(
     ).scalars().all()
     return {
         "purchase_order": _po_out(po),
-        "message": f"{len(loaded)} spools added successfully",
+        "message": f"{len(loaded)} New Rolls Created",
         "spools": [_spool_detail(s) for s in loaded],
         "print_path": "/labels/print?kind=spool&ids=" + ",".join(str(s.id) for s in loaded),
     }

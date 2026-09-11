@@ -6,7 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db import get_db
 from app.deps import get_current_user
@@ -25,6 +27,7 @@ class SheetIn(BaseModel):
     width_mm: float = 54
     height_mm: float = 70
     columns: int = 3
+    layout: str = "sheet"
 
 
 def _data_qr(kind: str, token: str, base: str) -> str:
@@ -39,8 +42,8 @@ def _data_barcode(code: str) -> str:
 
 def _product_card(product: FilamentProduct, qr_url: str, barcode_url: str) -> dict:
     return {
-        "title": f"{product.manufacturer} {product.material}",
-        "lines": [product.color, product.spool_size_label],
+        "title": product.manufacturer,
+        "lines": [product.product_name or product.material, product.color, product.spool_size_label],
         "code": product.barcode_id,
         "qr_url": qr_url,
         "barcode_url": barcode_url,
@@ -50,9 +53,16 @@ def _product_card(product: FilamentProduct, qr_url: str, barcode_url: str) -> di
 
 
 def _spool_card(spool: FilamentSpool, qr_url: str) -> dict:
+    product = spool.product
+    manufacturer = (product.manufacturer if product else spool.manufacturer) or ""
+    material = (product.material if product else spool.material) or ""
+    color = (product.color if product else spool.color) or ""
+    size = (product.spool_size_label if product else "") or (
+        f"{spool.initial_weight_g / 1000:.0f} kg" if spool.initial_weight_g >= 1000 else f"{spool.initial_weight_g:.0f} g"
+    )
     return {
-        "title": f"{spool.manufacturer} {spool.material}",
-        "lines": [spool.color, f"{spool.initial_weight_g / 1000:.0f} kg" if spool.initial_weight_g >= 1000 else f"{spool.initial_weight_g:.0f} g"],
+        "title": manufacturer,
+        "lines": [material, color, size],
         "code": spool.public_code or spool.qr_token,
         "qr_url": qr_url,
         "barcode_url": "",
@@ -95,7 +105,13 @@ async def label_sheet(
         await audit(db, "labels_generated", "product", "sheet", {"count": len(cards)}, actor=user.email)
     elif payload.kind == "spool":
         for item in payload.items:
-            spool = await db.get(FilamentSpool, UUID(str(item["id"])))
+            spool = (
+                await db.execute(
+                    select(FilamentSpool)
+                    .options(selectinload(FilamentSpool.product))
+                    .where(FilamentSpool.id == UUID(str(item["id"])))
+                )
+            ).scalar_one_or_none()
             if not spool:
                 continue
             copies = max(1, int(item.get("copies") or 1))
@@ -149,6 +165,7 @@ async def label_sheet(
         width_mm=payload.width_mm,
         height_mm=payload.height_mm,
         columns=payload.columns,
+        layout=payload.layout,
     )
     return {"html": html, "count": len(cards), "cards": cards}
 
@@ -161,10 +178,11 @@ async def preview_sheet(
     width_mm: float = 54,
     height_mm: float = 70,
     columns: int = 3,
+    layout: str = "sheet",
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     items = [{"id": i, "copies": copies} for i in ids.split(",") if i]
-    payload = SheetIn(kind=kind, items=items, width_mm=width_mm, height_mm=height_mm, columns=columns)
+    payload = SheetIn(kind=kind, items=items, width_mm=width_mm, height_mm=height_mm, columns=columns, layout=layout)
     data = await label_sheet(payload, db, user)
     return HTMLResponse(data["html"])

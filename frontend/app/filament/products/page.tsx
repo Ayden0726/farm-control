@@ -33,6 +33,8 @@ const empty = {
   spool_size_label: "3 kg",
   filament_weight_g: "3000",
   purchase_cost: "57",
+  nozzle_temp_c: "250",
+  bed_temp_c: "80",
   min_stock_g: "6000",
   target_stock_g: "18000",
   supplier_url: "",
@@ -64,9 +66,11 @@ export default function ProductsPage() {
           target_stock_g: Number(form.target_stock_g),
           preferred_spool_weight_g: Number(form.filament_weight_g),
           normal_price: Number(form.purchase_cost),
+          nozzle_temp_c: form.nozzle_temp_c ? Number(form.nozzle_temp_c) : null,
+          bed_temp_c: form.bed_temp_c ? Number(form.bed_temp_c) : null,
         }),
       });
-      toast.success("Filament product created — FarmOS barcode is ready to print.");
+      toast.success("Filament profile saved. Add rolls from the profile — do not re-enter this information.");
       setOpen(false);
       load();
     } catch (err) {
@@ -79,13 +83,13 @@ export default function ProductsPage() {
       <FilamentNav />
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Create the product first. FarmOS generates a reusable receiving barcode — manufacturer barcodes are not required.
+          Create a filament profile once. FarmOS generates a reusable FILT- barcode. New rolls get sequential SPOOL numbers — you do not re-enter colour, size, or temperatures.
         </p>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button />}>New filament type</DialogTrigger>
+          <DialogTrigger render={<Button />}>New filament profile</DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Create filament product</DialogTitle>
+              <DialogTitle>Create filament profile</DialogTitle>
             </DialogHeader>
             <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
               {(
@@ -99,6 +103,8 @@ export default function ProductsPage() {
                   ["purchase_cost", "Purchase cost"],
                   ["supplier_sku", "Supplier SKU"],
                   ["supplier_url", "Supplier URL"],
+                  ["nozzle_temp_c", "Nozzle °C"],
+                  ["bed_temp_c", "Bed °C"],
                   ["min_stock_g", "Minimum stock (g)"],
                   ["target_stock_g", "Target stock (g)"],
                 ] as const
@@ -118,7 +124,7 @@ export default function ProductsPage() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Product</TableHead>
+            <TableHead>Profile</TableHead>
             <TableHead>FarmOS barcode</TableHead>
             <TableHead>Physical</TableHead>
             <TableHead>Available</TableHead>
@@ -140,9 +146,12 @@ export default function ProductsPage() {
                 {p.stock.available_kg.toFixed(1)} kg
                 {p.recommend.needed ? ` · buy ${p.recommend.rolls}` : ""}
               </TableCell>
-              <TableCell>
-                <Link href={`/filament/products/${p.id}`} className="text-xs text-amber-300 hover:underline">
-                  Open
+              <TableCell className="space-x-3">
+                <Link href={`/filament/products/${p.id}?add=1`} className="text-xs text-amber-300 hover:underline">
+                  Add rolls
+                </Link>
+                <Link href={`/filament/products/${p.id}`} className="text-xs text-zinc-400 hover:underline">
+                  Profile
                 </Link>
               </TableCell>
             </TableRow>

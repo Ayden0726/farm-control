@@ -329,7 +329,7 @@ async def resolve_scan(kind: str, token: str, db: AsyncSession = Depends(get_db)
             "id": str(row.id),
             "name": f"{row.manufacturer} {row.material} {row.color}",
             "barcode_id": row.barcode_id,
-            "path": f"/filament/receive?code={row.barcode_id}",
+            "path": f"/filament/products/{row.id}?add=1",
         }
     if found == "bin":
         return {"kind": "bin", "id": str(row.id), "name": row.name, "public_code": row.public_code, "path": "/inventory"}

@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/filament", label: "Dashboard" },
-  { href: "/filament/products", label: "Products" },
-  { href: "/filament/receive", label: "Receive" },
+  { href: "/filament/products", label: "Profiles" },
+  { href: "/filament/receive", label: "Scan receive" },
   { href: "/filament/labels", label: "Inventory Labels" },
   { href: "/filament/purchasing", label: "Purchasing" },
   { href: "/filament/locations", label: "Locations" },

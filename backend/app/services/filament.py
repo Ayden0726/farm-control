@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -80,12 +80,24 @@ async def audit(
 
 
 async def next_spool_number(db: AsyncSession) -> int:
-    seq = await db.get(IdSequence, "spool")
+    """Allocate the next SPOOL-###### value. Numbers are never reused."""
+    seq = (
+        await db.execute(select(IdSequence).where(IdSequence.name == "spool").with_for_update())
+    ).scalar_one_or_none()
     if seq is None:
-        seq = IdSequence(name="spool", next_value=1)
-        db.add(seq)
+        db.add(IdSequence(name="spool", next_value=1))
         await db.flush()
-    n = seq.next_value
+        seq = (
+            await db.execute(select(IdSequence).where(IdSequence.name == "spool").with_for_update())
+        ).scalar_one()
+    max_existing = (
+        await db.execute(
+            select(func.max(cast(func.substr(FilamentSpool.public_code, 7), Integer))).where(
+                FilamentSpool.public_code.ilike("SPOOL-%")
+            )
+        )
+    ).scalar()
+    n = max(int(seq.next_value or 1), int(max_existing or 0) + 1)
     seq.next_value = n + 1
     return n
 
