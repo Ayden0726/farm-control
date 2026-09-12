@@ -53,8 +53,8 @@
   --foreground: #e8edf2;
   --card: #141a21;
   --card-foreground: #e8edf2;
-  --popover: #161d26;
-  --popover-foreground: #e8edf2;
+  --popover: #0c1118;
+  --popover-foreground: #f5f7fa;
   --primary: #e8a54b;
   --primary-foreground: #1a1206;
   --secondary: #1c242e;
@@ -88,8 +88,8 @@
   --foreground: #e8edf2;
   --card: #141a21;
   --card-foreground: #e8edf2;
-  --popover: #161d26;
-  --popover-foreground: #e8edf2;
+  --popover: #0c1118;
+  --popover-foreground: #f5f7fa;
   --primary: #e8a54b;
   --primary-foreground: #1a1206;
   --secondary: #1c242e;
@@ -125,6 +125,25 @@
   textarea {
     touch-action: manipulation;
   }
+}
+
+select {
+  background-color: #121820 !important;
+  color: #f5f7fa !important;
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background-color: #0a0e14 !important;
+  color: #f5f7fa !important;
+}
+select option:disabled {
+  color: #9aa6b4 !important;
+}
+select option:checked,
+select option:hover {
+  background-color: #2a3544 !important;
+  color: #ffffff !important;
 }
 
 .farm-grid {
