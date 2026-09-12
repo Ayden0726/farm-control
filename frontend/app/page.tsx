@@ -11,6 +11,7 @@ import { formatDuration, formatEta, formatGrams, formatMoney } from "@/lib/forma
 import { toast } from "sonner";
 import { ScanLine } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { PrinterCamera } from "@/components/printer-camera";
 import { cn } from "@/lib/utils";
 
 function Kpi({ label, value, warn }: { label: string; value: number | string; warn?: boolean }) {
@@ -89,8 +90,109 @@ function PrinterCard({ printer, onClear }: { printer: Printer; onClear: (id: str
             Confirm bed cleared
           </Button>
         )}
+        {(printer as { camera_configured?: boolean }).camera_configured && (
+          <PrinterCamera printerId={printer.id} className="h-24 w-full" />
+        )}
         <Link href={`/printers/${printer.id}`} className="block text-center text-xs text-amber-300 hover:underline">
           Open printer
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecommendedJobs() {
+  const [rows, setRows] = useState<
+    {
+      printer_id: string;
+      printer_name: string;
+      printer_status: string;
+      reason: string;
+      recommendation: {
+        part_id: string;
+        part_sku: string;
+        quantity: number;
+        gcode_filename: string | null;
+      } | null;
+    }[]
+  >([]);
+
+  async function load() {
+    try {
+      setRows(await api("/api/v1/planner/next/jobs"));
+    } catch {
+      /* ignore */
+    }
+  }
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 8000);
+    return () => clearInterval(id);
+  }, []);
+
+  async function queueOne(row: (typeof rows)[0]) {
+    if (!row.recommendation) return;
+    try {
+      await api("/api/v1/planner/next/queue", {
+        method: "POST",
+        body: JSON.stringify({
+          printer_id: row.printer_id,
+          part_id: row.recommendation.part_id,
+          quantity: row.recommendation.quantity,
+        }),
+      });
+      toast.success(`Queued ${row.recommendation.part_sku} on ${row.printer_name}`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not queue");
+    }
+  }
+
+  async function queueAll() {
+    try {
+      const res = await api<{ queued: unknown[] }>("/api/v1/planner/next/queue-all", { method: "POST" });
+      toast.success(`Queued ${res.queued.length} recommended jobs`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not queue");
+    }
+  }
+
+  if (!rows.length) return null;
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle>Recommended next jobs</CardTitle>
+        <Button size="sm" onClick={queueAll}>
+          Queue all recommended jobs
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.map((row) => (
+          <div key={row.printer_id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/8 p-3 text-sm">
+            <div>
+              <div className="font-medium">
+                {row.printer_name}
+                <span className="ml-2 text-xs text-zinc-500">{row.printer_status}</span>
+              </div>
+              {row.recommendation ? (
+                <div className="text-zinc-300">
+                  Recommended: {row.recommendation.part_sku}-x{row.recommendation.quantity}
+                  <div className="text-xs text-zinc-500">{row.reason}</div>
+                </div>
+              ) : (
+                <div className="text-xs text-zinc-500">{row.reason}</div>
+              )}
+            </div>
+            {row.recommendation && (
+              <Button size="sm" variant="outline" onClick={() => queueOne(row)}>
+                Queue job
+              </Button>
+            )}
+          </div>
+        ))}
+        <Link href="/planner" className="block text-xs text-amber-300 hover:underline">
+          Open production planner
         </Link>
       </CardContent>
     </Card>
@@ -135,6 +237,7 @@ export default function DashboardPage() {
   }
 
   const running = data.printers.filter((p) => p.status === "printing" || p.status === "paused");
+  const m = (data as { manufacturing?: Record<string, number | string | null> }).manufacturing;
 
   return (
     <div className="space-y-6">
@@ -146,6 +249,8 @@ export default function DashboardPage() {
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         <Kpi label="Printing" value={data.counts.printing} />
+        <Kpi label="Idle" value={data.counts.idle ?? 0} />
+        <Kpi label="Offline" value={data.counts.offline ?? 0} warn={(data.counts.offline ?? 0) > 0} />
         <Kpi label="Bed clear" value={data.counts.waiting_for_bed_clear} warn={data.counts.waiting_for_bed_clear > 0} />
         <Kpi label="Queued" value={data.counts.queued_jobs} />
         <Kpi label="Failed" value={data.counts.failed_jobs} warn={data.counts.failed_jobs > 0} />
@@ -154,6 +259,19 @@ export default function DashboardPage() {
         <Kpi label="Low filament" value={data.counts.low_filament} warn={data.counts.low_filament > 0} />
         <Kpi label="Awaiting QC" value={data.counts.awaiting_qc} />
       </div>
+      {m && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+          <Kpi label="Parts low" value={Number(m.parts_low || 0)} warn={Number(m.parts_low) > 0} />
+          <Kpi label="Hardware low" value={Number(m.hardware_low || 0)} warn={Number(m.hardware_low) > 0} />
+          <Kpi label="Packaging low" value={Number(m.packaging_low || 0)} warn={Number(m.packaging_low) > 0} />
+          <Kpi label="Yield today" value={m.first_pass_yield != null ? `${m.first_pass_yield}%` : "—"} />
+          <Kpi label="Failed today" value={Number(m.failed_parts_today || 0)} warn={Number(m.failed_parts_today) > 0} />
+          <Kpi label="Produced today" value={Number(m.parts_produced_today || 0)} />
+          <Kpi label="Utilisation" value={`${m.printer_utilisation_pct ?? 0}%`} />
+          <Kpi label="Revenue today" value={formatMoney(Number(m.revenue_today || 0))} />
+        </div>
+      )}
+      <RecommendedJobs />
 
       <section>
         <div className="mb-3 flex items-end justify-between">

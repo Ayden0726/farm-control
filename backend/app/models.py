@@ -31,6 +31,8 @@ def utcnow() -> datetime:
 class UserRole(str, enum.Enum):
     admin = "admin"
     operator = "operator"
+    packing = "packing"
+    inventory = "inventory"
     viewer = "viewer"
 
 
@@ -102,7 +104,9 @@ class NotificationType(str, enum.Enum):
     order_ready = "order_ready"
     filament_low = "filament_low"
     filament_reorder = "filament_reorder"
+    hardware_reorder = "hardware_reorder"
     maintenance_due = "maintenance_due"
+    backup_failed = "backup_failed"
     info = "info"
 
 
@@ -117,7 +121,9 @@ PHONE_EVENTS: tuple[NotificationType, ...] = (
     NotificationType.order_ready,
     NotificationType.filament_low,
     NotificationType.filament_reorder,
+    NotificationType.hardware_reorder,
     NotificationType.maintenance_due,
+    NotificationType.backup_failed,
 )
 
 
@@ -160,6 +166,8 @@ class Part(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    min_stock: Mapped[int] = mapped_column(Integer, default=0)
+    target_stock: Mapped[int] = mapped_column(Integer, default=0)
 
     gcode_files: Mapped[list[GCodeFile]] = relationship(back_populates="part")
     stl_files: Mapped[list[StlFile]] = relationship(back_populates="part")
@@ -182,6 +190,15 @@ class GCodeFile(TimestampMixin, Base):
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    slicer: Mapped[str] = mapped_column(String(80), default="")
+    slicer_profile: Mapped[str] = mapped_column(String(120), default="")
+    nozzle_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    layer_height_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_bed_x_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_bed_y_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    required_nozzle_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unattended_approved: Mapped[bool] = mapped_column(Boolean, default=True)
+    production_approved: Mapped[bool] = mapped_column(Boolean, default=False)
 
     part: Mapped[Part | None] = relationship(back_populates="gcode_files")
     compatible_printers: Mapped[list[GCodePrinterCompat]] = relationship(
@@ -229,6 +246,9 @@ class Product(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     bom_items: Mapped[list[BomItem]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
+    bom_hardware: Mapped[list[BomHardwareItem]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
 
@@ -284,6 +304,23 @@ class Printer(TimestampMixin, Base):
     maintenance_notes: Mapped[str] = mapped_column(Text, default="")
     qr_token: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    build_x_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    build_y_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    build_z_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nozzle_diameter_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nozzle_material: Mapped[str] = mapped_column(String(40), default="")
+    supported_materials: Mapped[list[str]] = mapped_column(JSON, default=list)
+    max_nozzle_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_bed_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    build_plate_type: Mapped[str] = mapped_column(String(80), default="")
+    slicer_profile: Mapped[str] = mapped_column(String(120), default="")
+    camera_snapshot_url: Mapped[str] = mapped_column(String(500), default="")
+    camera_stream_url: Mapped[str] = mapped_column(String(500), default="")
+    camera_auth_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    unattended_mode: Mapped[str] = mapped_column(String(40), default="allowed")
+    avg_power_watts: Mapped[float] = mapped_column(Float, default=180)
+    machine_rate_per_hour: Mapped[float] = mapped_column(Float, default=0)
+    current_downtime_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     assigned_spool: Mapped[FilamentSpool | None] = relationship(
         foreign_keys=[assigned_spool_id], post_update=True
@@ -351,6 +388,8 @@ class ProductionRun(TimestampMixin, Base):
         Enum(ProductionRunStatus), default=ProductionRunStatus.draft
     )
     notes: Mapped[str] = mapped_column(Text, default="")
+    batch_code: Mapped[str | None] = mapped_column(String(80), unique=True, index=True, nullable=True)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id"), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -445,6 +484,10 @@ class PrintJob(TimestampMixin, Base):
     hold_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
     filament_required_g: Mapped[float] = mapped_column(Float, default=0)
     filament_available_g: Mapped[float] = mapped_column(Float, default=0)
+    compatibility_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    incompatibility_reason: Mapped[str] = mapped_column(String(500), default="")
+    batch_code: Mapped[str | None] = mapped_column(String(80), index=True, nullable=True)
+    unattended_approved: Mapped[bool] = mapped_column(Boolean, default=True)
 
     production_run: Mapped[ProductionRun | None] = relationship(back_populates="jobs")
     production_run_item: Mapped[ProductionRunItem | None] = relationship()
@@ -470,6 +513,9 @@ class QcBatch(TimestampMixin, Base):
     status: Mapped[QcStatus] = mapped_column(Enum(QcStatus), default=QcStatus.awaiting_qc)
     notes: Mapped[str] = mapped_column(Text, default="")
     inspected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[str] = mapped_column(String(80), default="")
+    photo_path: Mapped[str] = mapped_column(String(500), default="")
+    result: Mapped[str] = mapped_column(String(40), default="")
 
     job: Mapped[PrintJob] = relationship()
     part: Mapped[Part] = relationship()
@@ -512,8 +558,15 @@ class PartBin(TimestampMixin, Base):
     qr_token: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
     kind: Mapped[str] = mapped_column(String(40), default="finished_part")
+    quantity_on_hand: Mapped[int] = mapped_column(Integer, default=0)
+    quantity_reserved: Mapped[int] = mapped_column(Integer, default=0)
 
     part: Mapped[Part | None] = relationship()
+    movements: Mapped[list[BinMovement]] = relationship(back_populates="bin")
+
+    @property
+    def quantity_available(self) -> int:
+        return max(0, self.quantity_on_hand - self.quantity_reserved)
 
 
 class Order(TimestampMixin, Base):
@@ -532,6 +585,17 @@ class Order(TimestampMixin, Base):
     production_run_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("production_runs.id"), nullable=True
     )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revenue: Mapped[float] = mapped_column(Float, default=0)
+    shipping_cost: Mapped[float] = mapped_column(Float, default=0)
+    payment_fee: Mapped[float] = mapped_column(Float, default=0)
+    packed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    packing_status: Mapped[str] = mapped_column(String(40), default="unpacked")
+    packing_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    packing_notes: Mapped[str] = mapped_column(Text, default="")
+    carrier: Mapped[str] = mapped_column(String(80), default="")
+    tracking_number: Mapped[str] = mapped_column(String(120), default="")
+    public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
 
     lines: Mapped[list[OrderLine]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
@@ -795,7 +859,13 @@ class PurchaseOrderLine(Base):
     purchase_order_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True
     )
-    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("filament_products.id"))
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("filament_products.id"), nullable=True
+    )
+    hardware_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("hardware_items.id"), nullable=True
+    )
+    line_kind: Mapped[str] = mapped_column(String(40), default="filament")
     quantity_ordered: Mapped[int] = mapped_column(Integer, default=1)
     quantity_received: Mapped[int] = mapped_column(Integer, default=0)
     spool_weight_g: Mapped[float] = mapped_column(Float, default=1000)
@@ -804,4 +874,290 @@ class PurchaseOrderLine(Base):
     supplier_sku: Mapped[str] = mapped_column(String(120), default="")
 
     purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="lines")
-    product: Mapped[FilamentProduct] = relationship()
+    product: Mapped[FilamentProduct | None] = relationship()
+    hardware_item: Mapped[HardwareItem | None] = relationship()
+
+
+class BomHardwareItem(Base):
+    __tablename__ = "bom_hardware_items"
+    __table_args__ = (UniqueConstraint("product_id", "hardware_item_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
+    hardware_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("hardware_items.id"))
+    quantity: Mapped[float] = mapped_column(Float, default=1)
+    is_optional: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    product: Mapped[Product] = relationship(back_populates="bom_hardware")
+    hardware_item: Mapped[HardwareItem] = relationship()
+
+
+class HardwareItem(TimestampMixin, Base):
+    __tablename__ = "hardware_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sku: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(80), default="hardware")
+    supplier: Mapped[str] = mapped_column(String(255), default="")
+    supplier_url: Mapped[str] = mapped_column(String(500), default="")
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    purchase_cost: Mapped[float] = mapped_column(Float, default=0)
+    unit_cost: Mapped[float] = mapped_column(Float, default=0)
+    quantity_on_hand: Mapped[float] = mapped_column(Float, default=0)
+    quantity_reserved: Mapped[float] = mapped_column(Float, default=0)
+    min_stock: Mapped[float] = mapped_column(Float, default=0)
+    target_stock: Mapped[float] = mapped_column(Float, default=0)
+    storage_location: Mapped[str] = mapped_column(String(255), default="")
+    reorder_mode: Mapped[str] = mapped_column(String(40), default="create_purchase_order")
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    barcode: Mapped[str] = mapped_column(String(80), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    @property
+    def quantity_available(self) -> float:
+        return max(0.0, (self.quantity_on_hand or 0) - (self.quantity_reserved or 0))
+
+
+class HardwareMovement(TimestampMixin, Base):
+    __tablename__ = "hardware_movements"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    hardware_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("hardware_items.id"), index=True)
+    quantity: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(String(50))
+    ref_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class BinMovement(TimestampMixin, Base):
+    __tablename__ = "bin_movements"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bin_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("part_bins.id", ondelete="CASCADE"), index=True)
+    part_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("parts.id"), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(50))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    actor: Mapped[str] = mapped_column(String(120), default="operator")
+
+    bin: Mapped[PartBin] = relationship(back_populates="movements")
+
+
+class ProductionPlan(TimestampMixin, Base):
+    __tablename__ = "production_plans"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    status: Mapped[str] = mapped_column(String(40), default="draft", index=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    production_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("production_runs.id"), nullable=True
+    )
+    created_by: Mapped[str] = mapped_column(String(120), default="")
+
+    lines: Mapped[list[ProductionPlanLine]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class ProductionPlanLine(Base):
+    __tablename__ = "production_plan_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("production_plans.id", ondelete="CASCADE"))
+    part_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("parts.id"))
+    gcode_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gcode_files.id"), nullable=True)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    jobs_needed: Mapped[int] = mapped_column(Integer, default=1)
+    estimated_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    estimated_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    required_filament_g: Mapped[float] = mapped_column(Float, default=0)
+    filament_ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    compatible: Mapped[bool] = mapped_column(Boolean, default=True)
+    incompatibility_reason: Mapped[str] = mapped_column(String(500), default="")
+    order_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    order_refs: Mapped[list[str]] = mapped_column(JSON, default=list)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    included: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    plan: Mapped[ProductionPlan] = relationship(back_populates="lines")
+    part: Mapped[Part] = relationship()
+    gcode_file: Mapped[GCodeFile | None] = relationship()
+    printer: Mapped[Printer | None] = relationship()
+
+
+class AssemblyKit(TimestampMixin, Base):
+    __tablename__ = "assembly_kits"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    public_code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id"))
+    order_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(40), default="parts_required", index=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assembled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    product: Mapped[Product] = relationship()
+    order: Mapped[Order | None] = relationship()
+    lines: Mapped[list[AssemblyKitLine]] = relationship(
+        back_populates="kit", cascade="all, delete-orphan"
+    )
+
+
+class AssemblyKitLine(Base):
+    __tablename__ = "assembly_kit_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assembly_kits.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20), default="part")
+    part_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("parts.id"), nullable=True)
+    hardware_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("hardware_items.id"), nullable=True
+    )
+    required_qty: Mapped[float] = mapped_column(Float, default=1)
+    reserved_qty: Mapped[float] = mapped_column(Float, default=0)
+    available_qty: Mapped[float] = mapped_column(Float, default=0)
+
+    kit: Mapped[AssemblyKit] = relationship(back_populates="lines")
+    part: Mapped[Part | None] = relationship()
+    hardware_item: Mapped[HardwareItem | None] = relationship()
+
+
+class QcFailureReason(Base):
+    __tablename__ = "qc_failure_reasons"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code: Mapped[str] = mapped_column(String(80), unique=True)
+    label: Mapped[str] = mapped_column(String(120))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class MaintenanceRule(TimestampMixin, Base):
+    __tablename__ = "maintenance_rules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(80), default="service")
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+    interval_print_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    interval_prints: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    interval_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    interval_filament_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notify: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    printer: Mapped[Printer | None] = relationship()
+
+
+class MaintenanceTask(TimestampMixin, Base):
+    __tablename__ = "maintenance_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("maintenance_rules.id"), nullable=True)
+    printer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(80), default="service")
+    status: Mapped[str] = mapped_column(String(40), default="due", index=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    printer: Mapped[Printer] = relationship()
+
+
+class PrinterDowntime(TimestampMixin, Base):
+    __tablename__ = "printer_downtime"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    printer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"), index=True)
+    reason: Mapped[str] = mapped_column(String(40), default="unknown")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    printer: Mapped[Printer] = relationship()
+
+
+class AuditLog(TimestampMixin, Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), index=True)
+    previous_value: Mapped[Any] = mapped_column(JSON, default=dict)
+    new_value: Mapped[Any] = mapped_column(JSON, default=dict)
+    actor: Mapped[str] = mapped_column(String(120), default="system")
+    source: Mapped[str] = mapped_column(String(40), default="api")
+
+
+class PartCostSnapshot(TimestampMixin, Base):
+    __tablename__ = "part_cost_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    part_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("parts.id"), index=True)
+    gcode_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gcode_files.id"), nullable=True)
+    filament_cost: Mapped[float] = mapped_column(Float, default=0)
+    electricity_cost: Mapped[float] = mapped_column(Float, default=0)
+    failure_cost: Mapped[float] = mapped_column(Float, default=0)
+    machine_cost: Mapped[float] = mapped_column(Float, default=0)
+    labour_cost: Mapped[float] = mapped_column(Float, default=0)
+    total_cost: Mapped[float] = mapped_column(Float, default=0)
+    filament_cost_per_kg: Mapped[float] = mapped_column(Float, default=0)
+    electricity_price: Mapped[float] = mapped_column(Float, default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class PackingCheck(TimestampMixin, Base):
+    __tablename__ = "packing_checks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(40), default="part")
+    required_qty: Mapped[float] = mapped_column(Float, default=1)
+    confirmed_qty: Mapped[float] = mapped_column(Float, default=0)
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    missing: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    order: Mapped[Order] = relationship()
+
+
+class Shipment(TimestampMixin, Base):
+    __tablename__ = "shipments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(40), default="manual")
+    carrier: Mapped[str] = mapped_column(String(80), default="")
+    tracking_number: Mapped[str] = mapped_column(String(120), default="")
+    cost: Mapped[float] = mapped_column(Float, default=0)
+    status: Mapped[str] = mapped_column(String(40), default="created")
+    label_url: Mapped[str] = mapped_column(String(500), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    order: Mapped[Order] = relationship()
+
+
+class BackupRecord(TimestampMixin, Base):
+    __tablename__ = "backup_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filename: Mapped[str] = mapped_column(String(255))
+    stored_path: Mapped[str] = mapped_column(String(500))
+    kind: Mapped[str] = mapped_column(String(40), default="manual")
+    status: Mapped[str] = mapped_column(String(40), default="ok")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    include_files: Mapped[bool] = mapped_column(Boolean, default=False)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+

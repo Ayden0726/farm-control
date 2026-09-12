@@ -8,13 +8,27 @@ import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import Link from "next/link";
+import { formatMoney } from "@/lib/format";
+import { QrDialog } from "@/components/qr-dialog";
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
+  const [profit, setProfit] = useState<{
+    revenue: number;
+    estimated_total_cost: number;
+    gross_profit: number;
+    gross_margin_pct: number;
+  } | null>(null);
 
   async function load() {
     setOrder(await api<Order>(`/api/v1/orders/${params.id}`));
+    try {
+      setProfit(await api(`/api/v1/costing/orders/${params.id}`));
+    } catch {
+      setProfit(null);
+    }
   }
   useEffect(() => {
     load();
@@ -48,6 +62,26 @@ export default function OrderDetailPage() {
             Mark fulfilled
           </Button>
           <Button onClick={() => fulfill(true)}>Mark shipped</Button>
+          <Link href={`/packing/${order.id}`}>
+            <Button variant="outline">Packing station</Button>
+          </Link>
+          {order.status !== "shipped" && order.status !== "cancelled" && (
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await api(`/api/v1/orders/${params.id}/cancel`, { method: "POST" });
+                  toast.success("Order cancelled. Reservations released.");
+                  load();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Cancel failed");
+                }
+              }}
+            >
+              Cancel order
+            </Button>
+          )}
+          {order.public_code && <QrDialog kind="order" token={order.public_code} label={order.reference} />}
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -79,6 +113,19 @@ export default function OrderDetailPage() {
           </CardContent>
         </Card>
       </div>
+      {profit && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Profitability</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm md:grid-cols-4">
+            <div>Revenue {formatMoney(profit.revenue)}</div>
+            <div>Est. cost {formatMoney(profit.estimated_total_cost)}</div>
+            <div>Gross profit {formatMoney(profit.gross_profit)}</div>
+            <div>Margin {profit.gross_margin_pct}%</div>
+          </CardContent>
+        </Card>
+      )}
       {order.notes && <p className="text-sm text-zinc-400">{order.notes}</p>}
     </div>
   );

@@ -51,6 +51,9 @@ async def create_run(
     )
     db.add(run)
     await db.flush()
+    from app.services.codes import next_batch_code
+
+    run.batch_code = await next_batch_code(db, payload.name)
     for pid in payload.printer_ids:
         db.add(ProductionRunPrinter(production_run_id=run.id, printer_id=pid))
     for item_in in payload.items:

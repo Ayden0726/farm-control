@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { FarmSettings, GCode, Part, Stl } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -38,18 +38,22 @@ export default function LibraryPage() {
   const [material, setMaterial] = useState("PETG");
   const [stl, setStl] = useState<File | null>(null);
   const [pack, setPack] = useState({ x: 220, y: 220, gap: 8 });
+  const [printers, setPrinters] = useState<{ id: string; name: string }[]>([]);
+  const [edit, setEdit] = useState<string | null>(null);
 
   async function load() {
-    const [gcode, models, partRows, settings] = await Promise.all([
+    const [gcode, models, partRows, settings, printerRows] = await Promise.all([
       api<GCode[]>("/api/v1/gcode?include_archived=true"),
       api<Stl[]>("/api/v1/stl"),
       api<Part[]>("/api/v1/parts"),
       api<FarmSettings>("/api/v1/settings"),
+      api<{ id: string; name: string }[]>("/api/v1/printers"),
     ]);
     setFiles(gcode);
     setStls(models);
     setParts(partRows);
     setPack({ x: settings.pack_bed_x_mm, y: settings.pack_bed_y_mm, gap: settings.pack_gap_mm });
+    setPrinters(printerRows);
   }
   useEffect(() => {
     load().catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load library"));
@@ -96,6 +100,12 @@ export default function LibraryPage() {
 
   async function archive(id: string, archived: boolean) {
     await api(`/api/v1/gcode/${id}`, { method: "PATCH", body: JSON.stringify({ is_archived: archived }) });
+    load();
+  }
+
+  async function saveGcode(g: GCode, patch: Partial<GCode>) {
+    await api(`/api/v1/gcode/${g.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+    toast.success("G-code version updated. Historical jobs keep the file they originally used.");
     load();
   }
 
@@ -163,6 +173,7 @@ export default function LibraryPage() {
               <TableHead>Time</TableHead>
               <TableHead>Filament</TableHead>
               <TableHead>Ver</TableHead>
+              <TableHead>Approved</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -175,7 +186,8 @@ export default function LibraryPage() {
               </TableRow>
             )}
             {files.map((g) => (
-              <TableRow key={g.id} className={g.is_archived ? "opacity-50" : ""}>
+              <Fragment key={g.id}>
+              <TableRow className={g.is_archived ? "opacity-50" : ""}>
                 <TableCell className="font-mono text-xs">{g.filename}</TableCell>
                 <TableCell>{g.part_sku || "—"}</TableCell>
                 <TableCell>×{g.quantity_per_file}</TableCell>
@@ -183,12 +195,98 @@ export default function LibraryPage() {
                 <TableCell>{formatDuration(g.estimated_time_seconds)}</TableCell>
                 <TableCell>{formatGrams(g.estimated_filament_grams)}</TableCell>
                 <TableCell>v{g.version}</TableCell>
+                <TableCell>{g.production_approved ? "Production" : g.is_archived ? "retired" : "draft"}</TableCell>
                 <TableCell>
-                  <Button size="xs" variant="outline" onClick={() => archive(g.id, !g.is_archived)}>
-                    {g.is_archived ? "Unarchive" : "Archive"}
-                  </Button>
+                  <div className="flex flex-wrap gap-1">
+                    <Button size="xs" variant="outline" onClick={() => archive(g.id, !g.is_archived)}>
+                      {g.is_archived ? "Unarchive" : "Archive"}
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={() => setEdit(edit === g.id ? null : g.id)}>
+                      Compatibility
+                    </Button>
+                    {!g.production_approved && (
+                      <Button size="xs" onClick={() => saveGcode(g, { production_approved: true })}>
+                        Mark production approved
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
+              {edit === g.id && (
+                <TableRow>
+                  <TableCell colSpan={9} className="bg-white/3">
+                    <div className="grid gap-2 md:grid-cols-4">
+                      <Input
+                        defaultValue={g.slicer || ""}
+                        placeholder="Slicer"
+                        onBlur={(e) => saveGcode(g, { slicer: e.target.value })}
+                      />
+                      <Input
+                        defaultValue={g.slicer_profile || ""}
+                        placeholder="Slicer profile"
+                        onBlur={(e) => saveGcode(g, { slicer_profile: e.target.value })}
+                      />
+                      <Input
+                        defaultValue={g.required_nozzle_mm ?? g.nozzle_mm ?? ""}
+                        placeholder="Required nozzle mm"
+                        onBlur={(e) => saveGcode(g, { required_nozzle_mm: e.target.value ? Number(e.target.value) : null })}
+                      />
+                      <Input
+                        defaultValue={g.layer_height_mm ?? ""}
+                        placeholder="Layer height mm"
+                        onBlur={(e) => saveGcode(g, { layer_height_mm: e.target.value ? Number(e.target.value) : null })}
+                      />
+                      <Input
+                        defaultValue={g.min_bed_x_mm ?? ""}
+                        placeholder="Min bed X mm"
+                        onBlur={(e) => saveGcode(g, { min_bed_x_mm: e.target.value ? Number(e.target.value) : null })}
+                      />
+                      <Input
+                        defaultValue={g.min_bed_y_mm ?? ""}
+                        placeholder="Min bed Y mm"
+                        onBlur={(e) => saveGcode(g, { min_bed_y_mm: e.target.value ? Number(e.target.value) : null })}
+                      />
+                      <Input
+                        defaultValue={g.notes || ""}
+                        placeholder="Notes"
+                        onBlur={(e) => saveGcode(g, { notes: e.target.value })}
+                      />
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={g.unattended_approved !== false}
+                          onChange={(e) => saveGcode(g, { unattended_approved: e.target.checked })}
+                        />
+                        Unattended approved
+                      </label>
+                      <div className="md:col-span-4 text-xs text-zinc-500">
+                        Compatible printers (empty = any, then profile checks still apply):
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {printers.map((p) => {
+                            const on = g.compatible_printer_ids.includes(p.id);
+                            return (
+                              <label key={p.id} className="flex items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={() => {
+                                    const next = on
+                                      ? g.compatible_printer_ids.filter((id) => id !== p.id)
+                                      : [...g.compatible_printer_ids, p.id];
+                                    saveGcode(g, { compatible_printer_ids: next });
+                                  }}
+                                />
+                                {p.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+              </Fragment>
             ))}
           </TableBody>
         </Table>

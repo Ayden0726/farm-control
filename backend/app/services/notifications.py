@@ -38,7 +38,9 @@ EVENT_LABELS: dict[str, str] = {
     NotificationType.order_ready.value: "Order ready for fulfilment",
     NotificationType.filament_low.value: "Filament low",
     NotificationType.filament_reorder.value: "Filament reorder",
+    NotificationType.hardware_reorder.value: "Hardware reorder",
     NotificationType.maintenance_due.value: "Maintenance due",
+    NotificationType.backup_failed.value: "Backup failed",
 }
 
 FIELD_LABELS: dict[str, str] = {

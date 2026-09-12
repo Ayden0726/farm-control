@@ -77,7 +77,24 @@ The API is on port 8000 (`/docs` for OpenAPI).
 - Pause, resume, reorder, cancel, and move jobs between printers.
 - Job history is permanent (status changes, never deleted).
 
-Printed parts go **Printed → Awaiting QC → Passed / Failed**. Only passed parts become sellable inventory. Failed parts are scrap and can be requeued.
+Printed parts go **Printed → Awaiting QC → Passed / Failed / Partial**. Only passed parts become sellable inventory. Failed parts are scrap. If **Automatically requeue failed QC parts** is on (Settings → Manufacturing), FarmOS reprints only the failed quantity.
+
+## Manufacturing (FarmOS MES)
+
+FarmOS plans production from open orders, BOMs, reserved inventory, the print queue, printer compatibility, filament, and maintenance status.
+
+1. A WooCommerce (or manual) order explodes the product BOM and **reserves** available finished parts. Available = physical − reserved.
+2. **Planner → Generate production plan** calculates true shortages and recommends compatible printers. Review and **Commit to print queue**.
+3. **Recommended next jobs** on the dashboard queues work by order age, stock shortages, compatibility, and filament.
+4. Prints complete into QC. Failed quantities become scrap and optional replacement jobs.
+5. Passed parts land in finished-part **bins**. Scan a `BIN-` QR to open the bin.
+6. When all printed and purchased BOM lines are available, **Kitting** shows **Kit Ready**. Reserve into a `KIT-` batch.
+7. **Packing station** confirms every line (or override, which is audited) then **Ready to ship**. Scan an `ORDER-` QR to open packing.
+8. Record carrier + tracking. WooCommerce is updated when that integration is configured.
+
+Hardware, packaging, and consumables share the filament purchase-order approval modes. Costing uses filament price, optional electricity ($/kWh × printer watts × hours), failure allowance, machine time, and hardware. Compatibility checks (nozzle, material, bed) block automatic assignment unless an administrator overrides.
+
+Global **SCAN** routes `PRINTER-`, `SPOOL-`, `FILT-`, `BIN-`, `ORDER-`, `BATCH-`, `KIT-`, and `HW-` codes. Search covers the same objects from desktop.
 
 ## Printer adapters
 
@@ -204,7 +221,7 @@ API_INTERNAL_URL=http://127.0.0.1:8472 npm run dev
 
 - Password hashing: bcrypt
 - JWT session tokens
-- Role-ready (`admin`, `operator`, `viewer`) — admin bypasses role gates; extend `require_roles` as you add users
+- Role-ready (`admin`, `operator`, `packing`, `inventory`, `viewer`) — enforced on write APIs via `require_perm`, not only by hiding UI. Admin bypasses gates.
 - Input validation via Pydantic
 - Printer secrets encrypted; omitted from API responses
 - Database migrations via Alembic (`create_all` also runs on boot for first install)

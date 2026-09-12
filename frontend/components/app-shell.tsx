@@ -9,35 +9,47 @@ import {
   Boxes,
   ClipboardCheck,
   Factory,
+  HeartPulse,
   LayoutDashboard,
   Library,
   LogOut,
   Package,
   Printer,
   ScanLine,
+  Search,
   Settings,
   ShoppingCart,
   Wrench,
   Menu,
+  CalendarClock,
+  PackageCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api, getToken, setToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/planner", label: "Planner", icon: CalendarClock },
+  { href: "/timeline", label: "Timeline", icon: CalendarClock },
   { href: "/queue", label: "Print Queue", icon: Factory },
   { href: "/printers", label: "Printers", icon: Printer },
   { href: "/production", label: "Production", icon: ClipboardCheck },
   { href: "/library", label: "G-code Library", icon: Library },
   { href: "/inventory", label: "Inventory & QC", icon: Boxes },
+  { href: "/hardware", label: "Hardware", icon: Package },
+  { href: "/kits", label: "Kitting", icon: PackageCheck },
+  { href: "/packing", label: "Packing", icon: PackageCheck },
   { href: "/filament", label: "Filament", icon: Package },
   { href: "/scan", label: "Scan", icon: ScanLine },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/products", label: "Products / BOM", icon: Boxes },
   { href: "/analytics", label: "Analytics", icon: Activity },
+  { href: "/costing", label: "Costing", icon: Activity },
   { href: "/maintenance", label: "Maintenance", icon: Wrench },
+  { href: "/health", label: "System health", icon: HeartPulse },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -135,6 +147,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <h1 className="text-base font-semibold text-zinc-100">{title}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <form
+              className="hidden md:block"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const q = (e.currentTarget.elements.namedItem("q") as HTMLInputElement)?.value;
+                if (q) router.push(`/search?q=${encodeURIComponent(q)}`);
+              }}
+            >
+              <div className="relative">
+                <Search className="absolute left-2 top-2 size-3.5 text-zinc-500" />
+                <Input name="q" placeholder="Search orders, parts, bins…" className="h-8 w-52 pl-7 text-xs" />
+              </div>
+            </form>
+            <Link href="/scan" className="lg:hidden">
+              <Button variant="ghost" size="icon">
+                <ScanLine className="size-4" />
+              </Button>
+            </Link>
             <Link href="/notifications" className="relative">
               <Button variant="ghost" size="icon">
                 <Bell className="size-4" />

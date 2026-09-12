@@ -47,7 +47,7 @@ export default function ProductionDetailPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold">{run.name}</h2>
+          <h2 className="text-xl font-semibold">{run.batch_code ? `${run.batch_code} · ${run.name}` : run.name}</h2>
           <p className="text-sm text-muted-foreground">{run.notes || "No notes"}</p>
         </div>
         <div className="flex items-center gap-2">

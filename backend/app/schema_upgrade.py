@@ -41,25 +41,87 @@ TABLE_COLUMNS = {
     },
     "printers": {
         "public_code": "VARCHAR(40)",
+        "build_x_mm": "DOUBLE PRECISION",
+        "build_y_mm": "DOUBLE PRECISION",
+        "build_z_mm": "DOUBLE PRECISION",
+        "nozzle_diameter_mm": "DOUBLE PRECISION",
+        "nozzle_material": "VARCHAR(40) DEFAULT ''",
+        "supported_materials": "JSON DEFAULT '[]'::json",
+        "max_nozzle_temp_c": "DOUBLE PRECISION",
+        "max_bed_temp_c": "DOUBLE PRECISION",
+        "build_plate_type": "VARCHAR(80) DEFAULT ''",
+        "slicer_profile": "VARCHAR(120) DEFAULT ''",
+        "camera_snapshot_url": "VARCHAR(500) DEFAULT ''",
+        "camera_stream_url": "VARCHAR(500) DEFAULT ''",
+        "camera_auth_encrypted": "TEXT",
+        "unattended_mode": "VARCHAR(40) DEFAULT 'allowed'",
+        "avg_power_watts": "DOUBLE PRECISION DEFAULT 180",
+        "machine_rate_per_hour": "DOUBLE PRECISION DEFAULT 0",
+        "current_downtime_reason": "VARCHAR(40)",
     },
     "part_bins": {
         "public_code": "VARCHAR(40)",
         "kind": "VARCHAR(40) DEFAULT 'finished_part'",
+        "quantity_on_hand": "INTEGER DEFAULT 0",
+        "quantity_reserved": "INTEGER DEFAULT 0",
     },
     "print_jobs": {
         "filament_override": "BOOLEAN DEFAULT false",
         "hold_reason": "VARCHAR(80)",
         "filament_required_g": "DOUBLE PRECISION DEFAULT 0",
         "filament_available_g": "DOUBLE PRECISION DEFAULT 0",
+        "compatibility_override": "BOOLEAN DEFAULT false",
+        "incompatibility_reason": "VARCHAR(500) DEFAULT ''",
+        "batch_code": "VARCHAR(80)",
+        "unattended_approved": "BOOLEAN DEFAULT true",
     },
     "gcode_files": {
         "required_color": "VARCHAR(80) DEFAULT ''",
+        "slicer": "VARCHAR(80) DEFAULT ''",
+        "slicer_profile": "VARCHAR(120) DEFAULT ''",
+        "nozzle_mm": "DOUBLE PRECISION",
+        "layer_height_mm": "DOUBLE PRECISION",
+        "min_bed_x_mm": "DOUBLE PRECISION",
+        "min_bed_y_mm": "DOUBLE PRECISION",
+        "required_nozzle_mm": "DOUBLE PRECISION",
+        "unattended_approved": "BOOLEAN DEFAULT true",
+        "production_approved": "BOOLEAN DEFAULT false",
     },
     "stl_files": {
         "bbox_x_mm": "DOUBLE PRECISION",
         "bbox_y_mm": "DOUBLE PRECISION",
         "bbox_z_mm": "DOUBLE PRECISION",
         "triangle_count": "INTEGER",
+    },
+    "parts": {
+        "min_stock": "INTEGER DEFAULT 0",
+        "target_stock": "INTEGER DEFAULT 0",
+    },
+    "production_runs": {
+        "batch_code": "VARCHAR(80)",
+        "product_id": "UUID",
+    },
+    "qc_batches": {
+        "failure_reason": "VARCHAR(80) DEFAULT ''",
+        "photo_path": "VARCHAR(500) DEFAULT ''",
+        "result": "VARCHAR(40) DEFAULT ''",
+    },
+    "orders": {
+        "due_at": "TIMESTAMPTZ",
+        "revenue": "DOUBLE PRECISION DEFAULT 0",
+        "shipping_cost": "DOUBLE PRECISION DEFAULT 0",
+        "payment_fee": "DOUBLE PRECISION DEFAULT 0",
+        "packed_at": "TIMESTAMPTZ",
+        "packing_status": "VARCHAR(40) DEFAULT 'unpacked'",
+        "packing_override": "BOOLEAN DEFAULT false",
+        "packing_notes": "TEXT DEFAULT ''",
+        "carrier": "VARCHAR(80) DEFAULT ''",
+        "tracking_number": "VARCHAR(120) DEFAULT ''",
+        "public_code": "VARCHAR(40)",
+    },
+    "purchase_order_lines": {
+        "hardware_item_id": "UUID",
+        "line_kind": "VARCHAR(40) DEFAULT 'filament'",
     },
 }
 
@@ -82,6 +144,20 @@ def _add_columns(conn: Connection, insp, table: str, columns: dict[str, str]) ->
         if name not in existing:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
             logger.info("Added %s.%s", table, name)
+
+
+def _add_enum_value(conn: Connection, type_name: str, value: str) -> None:
+    exists = conn.execute(
+        text(
+            "SELECT 1 FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid "
+            "WHERE t.typname = :t AND e.enumlabel = :v"
+        ),
+        {"t": type_name, "v": value},
+    ).scalar()
+    if exists:
+        return
+    conn.execute(text(f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'"))
+    logger.info("Added enum value %s.%s", type_name, value)
 
 
 def _add_unique_index(conn: Connection, table: str, column: str, index_name: str) -> None:
@@ -125,3 +201,11 @@ def upgrade_schema(conn: Connection) -> None:
         _add_unique_index(conn, "part_bins", "public_code", "ux_part_bins_public_code")
     if "filament_products" in tables:
         _add_unique_index(conn, "filament_products", "barcode_id", "ux_filament_products_barcode")
+    if "orders" in tables:
+        _add_unique_index(conn, "orders", "public_code", "ux_orders_public_code")
+    if "production_runs" in tables:
+        _add_unique_index(conn, "production_runs", "batch_code", "ux_production_runs_batch_code")
+    if "purchase_order_lines" in tables:
+        conn.execute(text("ALTER TABLE purchase_order_lines ALTER COLUMN product_id DROP NOT NULL"))
+    _add_enum_value(conn, "userrole", "packing")
+    _add_enum_value(conn, "userrole", "inventory")

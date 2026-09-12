@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,15 +31,31 @@ type Qc = {
   status: string;
   gcode_filename: string | null;
 };
-type Bin = { id: string; name: string; location: string; part_sku: string | null; qr_token: string };
+type Bin = {
+  id: string;
+  name: string;
+  location: string;
+  part_sku: string | null;
+  qr_token: string;
+  public_code?: string | null;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  quantity_available: number;
+};
+type Reason = { id: string; code: string; label: string; is_active: boolean };
+type QcStats = { first_pass_yield: number; by_reason: { reason: string; failed: number }[] };
 
 export default function InventoryPage() {
   const [stock, setStock] = useState<Stock[]>([]);
   const [qc, setQc] = useState<Qc[]>([]);
   const [bins, setBins] = useState<Bin[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
+  const [reasons, setReasons] = useState<Reason[]>([]);
+  const [stats, setStats] = useState<QcStats | null>(null);
   const [pass, setPass] = useState<Record<string, string>>({});
   const [fail, setFail] = useState<Record<string, string>>({});
+  const [reason, setReason] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [binName, setBinName] = useState("");
   const [binLoc, setBinLoc] = useState("");
   const [binPart, setBinPart] = useState("");
@@ -48,6 +65,16 @@ export default function InventoryPage() {
     setQc(await api<Qc[]>("/api/v1/qc"));
     setBins(await api<Bin[]>("/api/v1/bins"));
     setParts(await api<Part[]>("/api/v1/parts"));
+    try {
+      setReasons(await api<Reason[]>("/api/v1/qc/reasons"));
+    } catch {
+      setReasons([]);
+    }
+    try {
+      setStats(await api<QcStats>("/api/v1/qc/stats"));
+    } catch {
+      setStats(null);
+    }
   }
   useEffect(() => {
     load();
@@ -62,9 +89,11 @@ export default function InventoryPage() {
         body: JSON.stringify({
           passed: Number(pass[id] || 0),
           failed: Number(fail[id] || 0),
+          failure_reason: reason[id] || "",
+          notes: notes[id] || "",
         }),
       });
-      toast.success("QC recorded. Passed parts entered finished inventory; failed parts logged as scrap.");
+      toast.success("QC recorded. Passed parts entered available inventory; failed parts are scrap and can auto-reprint.");
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "QC failed");
@@ -118,17 +147,44 @@ export default function InventoryPage() {
                     onChange={(e) => setFail({ ...fail, [batch.id]: e.target.value })}
                   />
                 </div>
+                <div>
+                  <Label className="text-xs">Failure reason</Label>
+                  <select
+                    className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                    value={reason[batch.id] || ""}
+                    onChange={(e) => setReason({ ...reason, [batch.id]: e.target.value })}
+                  >
+                    <option value="">None</option>
+                    {reasons
+                      .filter((r) => r.is_active)
+                      .map((r) => (
+                        <option key={r.id} value={r.code}>
+                          {r.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="min-w-40 flex-1">
+                  <Label className="text-xs">Notes</Label>
+                  <Input value={notes[batch.id] || ""} onChange={(e) => setNotes({ ...notes, [batch.id]: e.target.value })} />
+                </div>
                 <Button onClick={() => inspect(batch.id)}>Record QC</Button>
               </div>
             ))}
           </div>
+          {stats && (
+            <p className="mt-3 text-xs text-zinc-500">
+              First-pass yield {stats.first_pass_yield}%
+              {stats.by_reason[0] ? ` · most common defect: ${stats.by_reason[0].reason}` : ""}
+            </p>
+          )}
         </CardContent>
       </Card>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>SKU</TableHead>
-            <TableHead>On hand</TableHead>
+            <TableHead>Physical</TableHead>
             <TableHead>Reserved</TableHead>
             <TableHead>Available</TableHead>
             <TableHead>Awaiting QC</TableHead>
@@ -173,10 +229,11 @@ export default function InventoryPage() {
           </form>
           {bins.map((b) => (
             <div key={b.id} className="flex items-center justify-between text-sm">
-              <span>
-                {b.name} · {b.location} · {b.part_sku || "mixed"}
-              </span>
-              <QrDialog kind="bin" token={b.qr_token} label={b.name} />
+              <Link href={`/inventory/bins/${b.id}`} className="hover:text-amber-200">
+                {b.name} · {b.location} · {b.part_sku || "mixed"} · physical {b.quantity_on_hand} · reserved{" "}
+                {b.quantity_reserved} · available {b.quantity_available}
+              </Link>
+              <QrDialog kind="bin" token={b.public_code || b.qr_token} label={b.name} />
             </div>
           ))}
         </CardContent>

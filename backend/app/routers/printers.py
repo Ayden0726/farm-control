@@ -181,7 +181,24 @@ async def create_printer(
         last_seen_at=utcnow() if result.ok else None,
         qr_token=new_qr_token(),
         public_code=None,
+        build_x_mm=payload.build_x_mm,
+        build_y_mm=payload.build_y_mm,
+        build_z_mm=payload.build_z_mm,
+        nozzle_diameter_mm=payload.nozzle_diameter_mm,
+        nozzle_material=payload.nozzle_material or "",
+        supported_materials=payload.supported_materials or [],
+        max_nozzle_temp_c=payload.max_nozzle_temp_c,
+        max_bed_temp_c=payload.max_bed_temp_c,
+        build_plate_type=payload.build_plate_type or "",
+        slicer_profile=payload.slicer_profile or "",
+        camera_snapshot_url=payload.camera_snapshot_url or "",
+        camera_stream_url=payload.camera_stream_url or "",
+        unattended_mode=payload.unattended_mode or "allowed",
+        avg_power_watts=payload.avg_power_watts or 180,
+        machine_rate_per_hour=payload.machine_rate_per_hour or 0,
     )
+    if payload.camera_auth:
+        printer.camera_auth_encrypted = encrypt_secret(payload.camera_auth)
     db.add(printer)
     await db.flush()
     from app.services.barcodes import printer_public_code, unique_public_code
@@ -211,6 +228,7 @@ async def update_printer(
     api_key = data.pop("api_key", None)
     adapter_type = data.pop("adapter_type", None)
     enabled = data.pop("is_enabled", None)
+    camera_auth = data.pop("camera_auth", None)
     if "base_url" in data and data["base_url"]:
         data["base_url"] = normalize_base_url(data["base_url"])
     connection_changed = any(k in data for k in ("base_url", "extra_config")) or api_key is not None or adapter_type is not None
@@ -220,6 +238,8 @@ async def update_printer(
         printer.adapter_type = PrinterAdapterType(adapter_type)
     if api_key:
         printer.api_key_encrypted = encrypt_secret(api_key)
+    if camera_auth:
+        printer.camera_auth_encrypted = encrypt_secret(camera_auth)
     if enabled is False:
         await _retire_printer(db, printer)
     elif enabled is True:
@@ -380,3 +400,95 @@ async def assign_spool(
         printer.assigned_spool_id = None
     await db.commit()
     return printer_out(await _load_printer(db, printer.id))
+
+
+@router.get("/{printer_id}/camera")
+async def printer_camera(printer_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    from fastapi.responses import Response
+
+    from app.services.camera import fetch_snapshot, latest_snapshot_path
+
+    printer = await _load_printer(db, printer_id)
+    data, status = await fetch_snapshot(printer)
+    if data:
+        return Response(content=data, media_type="image/jpeg", headers={"X-Camera-Status": status})
+    latest = latest_snapshot_path(printer)
+    if latest:
+        return Response(content=latest.read_bytes(), media_type="image/jpeg", headers={"X-Camera-Status": "stale"})
+    raise HTTPException(404, "No camera snapshot available")
+
+
+@router.post("/{printer_id}/downtime")
+async def start_downtime(
+    printer_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.models import PrinterDowntime
+    from app.services.audit import record_audit
+
+    printer = await _load_printer(db, printer_id)
+    reason = str(payload.get("reason") or "unknown")
+    notes = str(payload.get("notes") or "")
+    open_row = (
+        await db.execute(
+            select(PrinterDowntime).where(
+                PrinterDowntime.printer_id == printer.id, PrinterDowntime.ended_at.is_(None)
+            )
+        )
+    ).scalars().first()
+    if not open_row:
+        db.add(PrinterDowntime(printer_id=printer.id, reason=reason, notes=notes))
+    printer.current_downtime_reason = reason
+    await record_audit(
+        db,
+        action="printer_downtime",
+        entity_type="printer",
+        entity_id=str(printer.id),
+        new={"reason": reason, "notes": notes},
+        actor=user.email,
+    )
+    await db.commit()
+    return printer_out(await _load_printer(db, printer.id))
+
+
+@router.post("/{printer_id}/downtime/end", response_model=PrinterOut)
+async def end_downtime(
+    printer_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    from app.models import PrinterDowntime
+
+    printer = await _load_printer(db, printer_id)
+    open_row = (
+        await db.execute(
+            select(PrinterDowntime).where(
+                PrinterDowntime.printer_id == printer.id, PrinterDowntime.ended_at.is_(None)
+            )
+        )
+    ).scalars().first()
+    if open_row:
+        open_row.ended_at = utcnow()
+    printer.current_downtime_reason = None
+    await db.commit()
+    return printer_out(await _load_printer(db, printer.id))
+
+
+@router.post("/{printer_id}/redistribute")
+async def redistribute(
+    printer_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
+    from app.services.audit import record_audit
+    from app.services.planner import redistribute_printer
+
+    result = await redistribute_printer(db, printer_id)
+    await record_audit(
+        db,
+        action="queue_redistribute",
+        entity_type="printer",
+        entity_id=str(printer_id),
+        new={"moved": len(result.get("moved") or []), "skipped": len(result.get("skipped") or [])},
+        actor=user.email,
+    )
+    await db.commit()
+    return result

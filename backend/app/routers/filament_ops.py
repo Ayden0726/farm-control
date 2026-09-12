@@ -728,11 +728,39 @@ def _identify_payload(hit: dict[str, Any]) -> dict[str, Any]:
             "id": str(row.id),
             "name": row.name,
             "public_code": row.public_code,
-            "path": "/inventory",
+            "path": f"/inventory/bins/{row.id}",
             "actions": ["bin"],
         }
     if kind == "job":
         return {"kind": "job", "id": str(row.id), "path": "/queue", "actions": []}
+    if kind == "order":
+        return {
+            "kind": "order",
+            "id": str(row.id),
+            "name": row.reference,
+            "public_code": getattr(row, "public_code", None),
+            "path": f"/packing/{row.id}",
+            "actions": ["pack"],
+        }
+    if kind == "batch":
+        return {
+            "kind": "batch",
+            "id": str(row.id),
+            "name": getattr(row, "batch_code", None) or row.name,
+            "path": f"/production/{row.id}",
+            "actions": [],
+        }
+    if kind == "kit":
+        return {"kind": "kit", "id": str(row.id), "name": row.public_code, "path": f"/kits/{row.id}", "actions": []}
+    if kind == "hardware":
+        return {
+            "kind": "hardware",
+            "id": str(row.id),
+            "name": row.name,
+            "public_code": getattr(row, "public_code", None),
+            "path": "/hardware",
+            "actions": [],
+        }
     raise HTTPException(404, "Unknown FarmOS code")
 
 

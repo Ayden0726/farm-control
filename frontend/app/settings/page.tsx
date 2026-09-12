@@ -35,6 +35,22 @@ export default function SettingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [mes, setMes] = useState({
+    auto_requeue_failed_qc: true,
+    electricity_price_per_kwh: "0.32",
+    labour_rate_per_hour: "0",
+    enable_electricity_cost: true,
+    enable_machine_cost: true,
+    enable_labour_cost: false,
+    enable_failure_cost: true,
+    payment_fee_percent: "0",
+    overnight_start_hour: "22",
+    overnight_end_hour: "7",
+    backup_retention_days: "14",
+    backup_include_files: false,
+    include_camera_in_notifications: false,
+  });
+  const [users, setUsers] = useState<{ id: string; email: string; full_name: string; role: string; is_active: boolean }[]>([]);
 
   useEffect(() => {
     api<Settings>("/api/v1/settings")
@@ -46,8 +62,26 @@ export default function SettingsPage() {
         setBedX(String(s.pack_bed_x_mm ?? 220));
         setBedY(String(s.pack_bed_y_mm ?? 220));
         setGap(String(s.pack_gap_mm ?? 8));
+        setMes({
+          auto_requeue_failed_qc: s.auto_requeue_failed_qc !== false,
+          electricity_price_per_kwh: String(s.electricity_price_per_kwh ?? 0.32),
+          labour_rate_per_hour: String(s.labour_rate_per_hour ?? 0),
+          enable_electricity_cost: s.enable_electricity_cost !== false,
+          enable_machine_cost: s.enable_machine_cost !== false,
+          enable_labour_cost: Boolean(s.enable_labour_cost),
+          enable_failure_cost: s.enable_failure_cost !== false,
+          payment_fee_percent: String(s.payment_fee_percent ?? 0),
+          overnight_start_hour: String(s.overnight_start_hour ?? 22),
+          overnight_end_hour: String(s.overnight_end_hour ?? 7),
+          backup_retention_days: String(s.backup_retention_days ?? 14),
+          backup_include_files: Boolean(s.backup_include_files),
+          include_camera_in_notifications: Boolean(s.include_camera_in_notifications),
+        });
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load settings"));
+    api<{ id: string; email: string; full_name: string; role: string; is_active: boolean }[]>("/api/v1/users")
+      .then(setUsers)
+      .catch(() => setUsers([]));
   }, []);
 
   useEffect(() => {
@@ -231,6 +265,174 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Manufacturing</CardTitle>
+          <CardDescription>
+            Production planner, overnight scheduling metadata, costing, QC reprints, and backups. Overnight rules never
+            bypass printer safety systems.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="flex items-start justify-between gap-4 rounded-lg border border-white/8 px-3 py-3">
+            <div>
+              <div className="text-sm font-medium">Automatically requeue failed QC parts</div>
+              <p className="text-xs text-zinc-500">Only the failed quantity is reprinted, not the whole plate.</p>
+            </div>
+            <Switch
+              checked={mes.auto_requeue_failed_qc}
+              onCheckedChange={(v) => setMes({ ...mes, auto_requeue_failed_qc: v })}
+            />
+          </label>
+          <label className="flex items-start justify-between gap-4 rounded-lg border border-white/8 px-3 py-3">
+            <div>
+              <div className="text-sm font-medium">Include camera snapshot in print notifications</div>
+              <p className="text-xs text-zinc-500">Fetched server-side. Camera credentials are never sent to the browser.</p>
+            </div>
+            <Switch
+              checked={mes.include_camera_in_notifications}
+              onCheckedChange={(v) => setMes({ ...mes, include_camera_in_notifications: v })}
+            />
+          </label>
+          <div className="grid gap-2 md:grid-cols-4">
+            <div>
+              <Label>Electricity $/kWh</Label>
+              <Input
+                value={mes.electricity_price_per_kwh}
+                onChange={(e) => setMes({ ...mes, electricity_price_per_kwh: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Labour $/h (optional)</Label>
+              <Input value={mes.labour_rate_per_hour} onChange={(e) => setMes({ ...mes, labour_rate_per_hour: e.target.value })} />
+            </div>
+            <div>
+              <Label>Payment fee %</Label>
+              <Input value={mes.payment_fee_percent} onChange={(e) => setMes({ ...mes, payment_fee_percent: e.target.value })} />
+            </div>
+            <div>
+              <Label>Backup retention days</Label>
+              <Input
+                value={mes.backup_retention_days}
+                onChange={(e) => setMes({ ...mes, backup_retention_days: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Overnight start hour</Label>
+              <Input value={mes.overnight_start_hour} onChange={(e) => setMes({ ...mes, overnight_start_hour: e.target.value })} />
+            </div>
+            <div>
+              <Label>Overnight end hour</Label>
+              <Input value={mes.overnight_end_hour} onChange={(e) => setMes({ ...mes, overnight_end_hour: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mes.enable_electricity_cost}
+                onChange={(e) => setMes({ ...mes, enable_electricity_cost: e.target.checked })}
+              />
+              Electricity cost
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mes.enable_machine_cost}
+                onChange={(e) => setMes({ ...mes, enable_machine_cost: e.target.checked })}
+              />
+              Machine time
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mes.enable_labour_cost}
+                onChange={(e) => setMes({ ...mes, enable_labour_cost: e.target.checked })}
+              />
+              Labour
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mes.enable_failure_cost}
+                onChange={(e) => setMes({ ...mes, enable_failure_cost: e.target.checked })}
+              />
+              Failure allowance
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mes.backup_include_files}
+                onChange={(e) => setMes({ ...mes, backup_include_files: e.target.checked })}
+              />
+              Include G-code files in backup
+            </label>
+          </div>
+          <Button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await api<Settings>("/api/v1/settings", {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    auto_requeue_failed_qc: mes.auto_requeue_failed_qc,
+                    electricity_price_per_kwh: Number(mes.electricity_price_per_kwh),
+                    labour_rate_per_hour: Number(mes.labour_rate_per_hour),
+                    enable_electricity_cost: mes.enable_electricity_cost,
+                    enable_machine_cost: mes.enable_machine_cost,
+                    enable_labour_cost: mes.enable_labour_cost,
+                    enable_failure_cost: mes.enable_failure_cost,
+                    payment_fee_percent: Number(mes.payment_fee_percent),
+                    overnight_start_hour: Number(mes.overnight_start_hour),
+                    overnight_end_hour: Number(mes.overnight_end_hour),
+                    backup_retention_days: Number(mes.backup_retention_days),
+                    backup_include_files: mes.backup_include_files,
+                    include_camera_in_notifications: mes.include_camera_in_notifications,
+                  }),
+                });
+                setSettings(res);
+                toast.success("Manufacturing settings saved");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed");
+              }
+            }}
+          >
+            Save manufacturing settings
+          </Button>
+        </CardContent>
+      </Card>
+      {users.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Operator roles</CardTitle>
+            <CardDescription>Permissions are enforced on the API, not only by hiding buttons.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {users.map((u) => (
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span>
+                  {u.full_name || u.email} <span className="text-zinc-500">{u.email}</span>
+                </span>
+                <select
+                  className="h-8 rounded-lg border border-input bg-transparent px-2"
+                  value={u.role}
+                  onChange={async (e) => {
+                    await api(`/api/v1/users/${u.id}`, { method: "PATCH", body: JSON.stringify({ role: e.target.value }) });
+                    toast.success("Role updated");
+                    setUsers((cur) => cur.map((x) => (x.id === u.id ? { ...x, role: e.target.value } : x)));
+                  }}
+                >
+                  {["admin", "operator", "packing", "inventory", "viewer"].map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       <PhoneNotificationSettings />
       <Card>
         <CardHeader>

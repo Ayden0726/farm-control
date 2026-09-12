@@ -217,3 +217,29 @@ async def job_filament_status(
         }
     spool = await db.get(FilamentSpool, printer.assigned_spool_id) if printer.assigned_spool_id else None
     return job_filament_check(job, printer, spool, job.gcode_file)
+
+
+@router.post("/{job_id}/override-compatibility", response_model=JobOut)
+async def override_compatibility(
+    job_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
+    from app.models import UserRole
+    from app.services.audit import record_audit
+
+    if user.role not in {UserRole.admin, UserRole.operator}:
+        raise HTTPException(403, "Only administrators and production operators can override compatibility")
+    job = await _job(db, job_id)
+    job.compatibility_override = True
+    if job.status == JobStatus.held and job.hold_reason in {"incompatible", "supervision_required"}:
+        job.status = JobStatus.queued
+        job.hold_reason = None
+    await record_audit(
+        db,
+        action="compatibility_override",
+        entity_type="job",
+        entity_id=str(job.id),
+        previous={"reason": job.incompatibility_reason},
+        actor=user.email,
+    )
+    await db.commit()
+    return job_out(await _job(db, job_id))

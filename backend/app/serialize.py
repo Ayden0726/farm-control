@@ -18,6 +18,7 @@ from app.schemas import (
     ProductionItemOut,
     ProductionRunOut,
 )
+from app.services.camera import camera_public
 
 
 def hours_until_maintenance(printer: Printer) -> float | None:
@@ -42,7 +43,10 @@ def printer_out(printer: Printer) -> PrinterOut:
         spool_code = printer.assigned_spool.public_code
         spool_remaining = printer.assigned_spool.remaining_weight_g
     extra = dict(printer.extra_config or {})
-    extra.pop("sim", None)  # don't leak internal sim blob as required config
+    extra.pop("sim", None)
+    extra.pop("camera_auth", None)
+    extra.pop("camera_password", None)
+    cam = camera_public(printer)
     return PrinterOut(
         id=printer.id,
         name=printer.name,
@@ -76,6 +80,23 @@ def printer_out(printer: Printer) -> PrinterOut:
         public_code=printer.public_code,
         assigned_spool_code=spool_code,
         assigned_spool_remaining_g=spool_remaining,
+        build_x_mm=getattr(printer, "build_x_mm", None),
+        build_y_mm=getattr(printer, "build_y_mm", None),
+        build_z_mm=getattr(printer, "build_z_mm", None),
+        nozzle_diameter_mm=getattr(printer, "nozzle_diameter_mm", None),
+        nozzle_material=getattr(printer, "nozzle_material", "") or "",
+        supported_materials=list(printer.supported_materials or []) if getattr(printer, "supported_materials", None) else [],
+        max_nozzle_temp_c=getattr(printer, "max_nozzle_temp_c", None),
+        max_bed_temp_c=getattr(printer, "max_bed_temp_c", None),
+        build_plate_type=getattr(printer, "build_plate_type", "") or "",
+        slicer_profile=getattr(printer, "slicer_profile", "") or "",
+        unattended_mode=getattr(printer, "unattended_mode", None) or "allowed",
+        avg_power_watts=getattr(printer, "avg_power_watts", None) or 180,
+        machine_rate_per_hour=getattr(printer, "machine_rate_per_hour", None) or 0,
+        current_downtime_reason=getattr(printer, "current_downtime_reason", None),
+        camera_configured=cam["configured"],
+        camera_status=cam["status"],
+        camera_proxy_url=cam["proxy_url"] if cam["configured"] else None,
     )
 
 
@@ -112,6 +133,9 @@ def job_out(job: PrintJob) -> JobOut:
         required_material=job.gcode_file.material if job.gcode_file else None,
         required_color=job.gcode_file.required_color if job.gcode_file else None,
         spool_code=(job.__dict__.get("spool").public_code if job.__dict__.get("spool") is not None else None),
+        compatibility_override=bool(getattr(job, "compatibility_override", False)),
+        incompatibility_reason=getattr(job, "incompatibility_reason", "") or "",
+        batch_code=getattr(job, "batch_code", None),
     )
 
 
@@ -154,6 +178,7 @@ def run_out(run: ProductionRun, jobs: list[PrintJob] | None = None) -> Productio
         printing_jobs=counts["printing"],
         completed_jobs=counts["completed"],
         failed_jobs=counts["failed"],
+        batch_code=getattr(run, "batch_code", None),
     )
 
 
@@ -173,6 +198,16 @@ def gcode_out(gcode: GCodeFile) -> GCodeOut:
         file_size_bytes=gcode.file_size_bytes,
         compatible_printer_ids=[c.printer_id for c in gcode.compatible_printers],
         created_at=gcode.created_at,
+        required_color=getattr(gcode, "required_color", "") or "",
+        slicer=getattr(gcode, "slicer", "") or "",
+        slicer_profile=getattr(gcode, "slicer_profile", "") or "",
+        nozzle_mm=getattr(gcode, "nozzle_mm", None),
+        layer_height_mm=getattr(gcode, "layer_height_mm", None),
+        min_bed_x_mm=getattr(gcode, "min_bed_x_mm", None),
+        min_bed_y_mm=getattr(gcode, "min_bed_y_mm", None),
+        required_nozzle_mm=getattr(gcode, "required_nozzle_mm", None),
+        unattended_approved=bool(getattr(gcode, "unattended_approved", True)),
+        production_approved=bool(getattr(gcode, "production_approved", False)),
     )
 
 

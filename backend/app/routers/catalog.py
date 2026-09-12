@@ -33,6 +33,8 @@ async def _part_out(db: AsyncSession, part: Part) -> PartOut:
         quantity_on_hand=stock.quantity_on_hand,
         quantity_reserved=stock.quantity_reserved,
         quantity_available=stock.quantity_available,
+        min_stock=getattr(part, "min_stock", 0) or 0,
+        target_stock=getattr(part, "target_stock", 0) or 0,
     )
 
 
@@ -166,6 +168,12 @@ async def update_gcode(
             await db.delete(row)
         for pid in compat:
             db.add(GCodePrinterCompat(gcode_id=gcode.id, printer_id=pid))
+    if data.get("production_approved") and gcode.part_id:
+        siblings = (
+            await db.execute(select(GCodeFile).where(GCodeFile.part_id == gcode.part_id, GCodeFile.id != gcode.id))
+        ).scalars().all()
+        for sibling in siblings:
+            sibling.production_approved = False
     await db.commit()
     gcode = (
         await db.execute(

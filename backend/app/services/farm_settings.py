@@ -85,3 +85,54 @@ async def upsert_automation(
         current["pack_bed_y_mm"] = round(payload["bed_y_mm"], 1)
         current["pack_gap_mm"] = round(payload["gap_mm"], 1)
     return current
+
+
+DEFAULT_MES = {
+    "auto_requeue_failed_qc": True,
+    "electricity_price_per_kwh": 0.32,
+    "labour_rate_per_hour": 0.0,
+    "enable_electricity_cost": True,
+    "enable_machine_cost": True,
+    "enable_labour_cost": False,
+    "enable_failure_cost": True,
+    "payment_fee_percent": 0.0,
+    "overnight_start_hour": 22,
+    "overnight_end_hour": 7,
+    "backup_retention_days": 14,
+    "backup_include_files": False,
+    "include_camera_in_notifications": False,
+}
+
+
+async def get_mes(db: AsyncSession) -> dict[str, Any]:
+    row = await db.get(AppSetting, "mes")
+    data = dict(DEFAULT_MES)
+    if row and isinstance(row.value, dict):
+        data.update({k: row.value[k] for k in row.value if k in DEFAULT_MES})
+    data["auto_requeue_failed_qc"] = _as_bool(data.get("auto_requeue_failed_qc"), True)
+    data["enable_electricity_cost"] = _as_bool(data.get("enable_electricity_cost"), True)
+    data["enable_machine_cost"] = _as_bool(data.get("enable_machine_cost"), True)
+    data["enable_labour_cost"] = _as_bool(data.get("enable_labour_cost"), False)
+    data["enable_failure_cost"] = _as_bool(data.get("enable_failure_cost"), True)
+    data["backup_include_files"] = _as_bool(data.get("backup_include_files"), False)
+    data["include_camera_in_notifications"] = _as_bool(data.get("include_camera_in_notifications"), False)
+    data["electricity_price_per_kwh"] = _as_float(data.get("electricity_price_per_kwh"), 0.32)
+    data["labour_rate_per_hour"] = _as_float(data.get("labour_rate_per_hour"), 0.0)
+    data["payment_fee_percent"] = _as_float(data.get("payment_fee_percent"), 0.0)
+    data["overnight_start_hour"] = int(_as_float(data.get("overnight_start_hour"), 22))
+    data["overnight_end_hour"] = int(_as_float(data.get("overnight_end_hour"), 7))
+    data["backup_retention_days"] = int(_as_float(data.get("backup_retention_days"), 14))
+    return data
+
+
+async def upsert_mes(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
+    current = await get_mes(db)
+    for key in DEFAULT_MES:
+        if key in payload and payload[key] is not None:
+            current[key] = payload[key]
+    row = await db.get(AppSetting, "mes")
+    if row:
+        row.value = current
+    else:
+        db.add(AppSetting(key="mes", value=current))
+    return await get_mes(db)

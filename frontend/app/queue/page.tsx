@@ -83,6 +83,12 @@ export default function QueuePage() {
                       {job.filament_required_g ? `: need ${Math.round(job.filament_required_g)} g, have ${Math.round(job.filament_available_g || 0)} g` : ""}
                     </div>
                   )}
+                  {job.incompatibility_reason && !job.compatibility_override && (
+                    <div className="mt-1 max-w-[260px] text-[11px] text-amber-200">
+                      Job incompatible{job.assigned_printer_name ? ` with ${job.assigned_printer_name}` : ""}. Reason:{" "}
+                      {job.incompatibility_reason}
+                    </div>
+                  )}
               </TableCell>
               <TableCell className="font-mono text-xs">
                 {job.progress_percent.toFixed(0)}%
@@ -142,6 +148,11 @@ export default function QueuePage() {
                         Change spool
                       </Link>
                     </>
+                  )}
+                  {job.incompatibility_reason && !job.compatibility_override && ["queued", "held"].includes(job.status) && (
+                    <Button size="xs" variant="outline" onClick={() => act(job.id, "override-compatibility")}>
+                      Override compatibility
+                    </Button>
                   )}
                 </div>
               </TableCell>

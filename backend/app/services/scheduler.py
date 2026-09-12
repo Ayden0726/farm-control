@@ -138,6 +138,16 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
             status=QcStatus.awaiting_qc,
         )
     )
+    if job.part_id:
+        try:
+            from app.models import Part
+            from app.services.costing import estimate_part_cost
+
+            part = await db.get(Part, job.part_id)
+            if part:
+                await estimate_part_cost(db, part, persist=True)
+        except Exception:
+            logger.debug("part cost snapshot failed", exc_info=True)
 
     spool = None
     if printer.assigned_spool_id:
@@ -161,6 +171,20 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
     ctx = await _ctx_for_job(db, job, printer)
     ctx.duration_seconds = duration
     ctx.extra = {"quantity": job.quantity_produced, "completed_at": now.isoformat()}
+    try:
+        from app.services.farm_settings import get_mes
+        from app.services.camera import fetch_snapshot
+
+        mes = await get_mes(db)
+        if mes.get("include_camera_in_notifications"):
+            data, status = await fetch_snapshot(printer)
+            if data:
+                dest = __import__("app.config", fromlist=["get_settings"]).get_settings().snapshots_dir / f"job-{job.id}.jpg"
+                dest.write_bytes(data)
+                ctx.extra["snapshot_path"] = str(dest)
+                ctx.extra["camera_status"] = status
+    except Exception:
+        logger.debug("optional camera snapshot for notification failed", exc_info=True)
     title, body = print_complete_copy(
         printer.name,
         ctx.job_label or "print",
@@ -362,15 +386,20 @@ async def poll_live_printer(db: AsyncSession, printer: Printer) -> None:
 
 
 async def gcode_compatible(db: AsyncSession, gcode_id: UUID, printer_id: UUID) -> bool:
-    rows = (
-        await db.execute(select(GCodePrinterCompat).where(GCodePrinterCompat.gcode_id == gcode_id))
-    ).scalars().all()
-    if not rows:
-        return True
-    return any(r.printer_id == printer_id for r in rows)
+    from app.services.compatibility import allowlist_ok, gcode_printer_issues
+
+    printer = await db.get(Printer, printer_id)
+    gcode = await db.get(GCodeFile, gcode_id)
+    if not printer:
+        return False
+    if not await allowlist_ok(db, gcode_id, printer_id):
+        return False
+    return not gcode_printer_issues(gcode, printer)
 
 
 async def printer_allowed_for_job(db: AsyncSession, job: PrintJob, printer: Printer) -> bool:
+    from app.services.compatibility import format_incompatibility, job_printer_issues, unattended_blocks
+
     if job.assigned_printer_id and job.assigned_printer_id != printer.id:
         return False
     if job.production_run_id:
@@ -383,7 +412,19 @@ async def printer_allowed_for_job(db: AsyncSession, job: PrintJob, printer: Prin
         ).scalars().all()
         if allowed and printer.id not in {a.printer_id for a in allowed}:
             return False
-    return await gcode_compatible(db, job.gcode_file_id, printer.id)
+    issues = await job_printer_issues(db, job, printer)
+    if issues:
+        job.incompatibility_reason = format_incompatibility(printer.name, issues)
+        if job.compatibility_override:
+            return True
+        return False
+    block = await unattended_blocks(db, job, printer)
+    if block and not job.compatibility_override:
+        job.hold_reason = job.hold_reason or "supervision_required"
+        return False
+    if job.incompatibility_reason:
+        job.incompatibility_reason = ""
+    return True
 
 
 async def spool_sufficient(db: AsyncSession, printer: Printer, job: PrintJob) -> bool:
@@ -525,6 +566,13 @@ async def tick(db: AsyncSession) -> None:
     await _maybe_notify_maintenance(db, printers)
     await assign_jobs(db)
     await _maybe_reorder(db)
+    await _maybe_backup(db)
+    try:
+        from app.services.maintenance_rules import evaluate_maintenance
+
+        await evaluate_maintenance(db)
+    except Exception:
+        logger.exception("maintenance evaluation failed")
 
 
 async def _maybe_notify_maintenance(db: AsyncSession, printers: list[Printer]) -> None:
@@ -578,3 +626,35 @@ async def _maybe_reorder(db: AsyncSession) -> None:
     if last and (now - last).total_seconds() < 60:
         return
     await run_reorder_pass(db)
+    try:
+        from app.services.hardware import run_hardware_reorder_pass
+
+        await run_hardware_reorder_pass(db)
+    except Exception:
+        logger.exception("hardware reorder failed")
+
+
+async def _maybe_backup(db: AsyncSession) -> None:
+    from app.models import AppSetting
+
+    row = await db.get(AppSetting, "last_scheduled_backup")
+    last = None
+    if row and isinstance(row.value, dict) and row.value.get("at"):
+        try:
+            last = datetime.fromisoformat(str(row.value["at"]).replace("Z", "+00:00"))
+        except ValueError:
+            last = None
+    now = utcnow()
+    if last and (now - last).total_seconds() < 86400:
+        return
+    try:
+        from app.services.backups import create_backup, notify_failed_backups
+
+        await create_backup(db, kind="scheduled")
+        if row:
+            row.value = {"at": now.isoformat()}
+        else:
+            db.add(AppSetting(key="last_scheduled_backup", value={"at": now.isoformat()}))
+        await notify_failed_backups(db)
+    except Exception:
+        logger.exception("scheduled backup failed")

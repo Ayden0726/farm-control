@@ -32,7 +32,7 @@ from app.schemas import (
 )
 from app.services.qr import render_qr_png
 from app.services.woocommerce import woocommerce_configured
-from app.services.farm_settings import get_automation, upsert_automation
+from app.services.farm_settings import get_automation, get_mes, upsert_automation, upsert_mes
 
 notify_router = APIRouter(prefix="/notifications-legacy-removed", tags=["notifications"])
 maint_router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -279,6 +279,24 @@ async def put_settings(
         pack_bed_y_mm=payload.pack_bed_y_mm,
         pack_gap_mm=payload.pack_gap_mm,
     )
+    mes_keys = {
+        "auto_requeue_failed_qc",
+        "electricity_price_per_kwh",
+        "labour_rate_per_hour",
+        "enable_electricity_cost",
+        "enable_machine_cost",
+        "enable_labour_cost",
+        "enable_failure_cost",
+        "payment_fee_percent",
+        "overnight_start_hour",
+        "overnight_end_hour",
+        "backup_retention_days",
+        "backup_include_files",
+        "include_camera_in_notifications",
+    }
+    mes_payload = payload.model_dump(include=mes_keys, exclude_none=True)
+    if mes_payload:
+        await upsert_mes(db, mes_payload)
     await db.commit()
     return await _settings_out(db)
 
@@ -287,6 +305,7 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
     settings = get_settings()
     company = await db.get(AppSetting, "company_name")
     automation = await get_automation(db)
+    mes = await get_mes(db)
     return SettingsOut(
         company_name=(company.value if company else "Print Farm"),
         woocommerce_url=settings.woocommerce_url,
@@ -300,6 +319,7 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
         pack_bed_x_mm=automation["pack_bed_x_mm"],
         pack_bed_y_mm=automation["pack_bed_y_mm"],
         pack_gap_mm=automation["pack_gap_mm"],
+        **{k: mes[k] for k in mes},
     )
 
 
@@ -342,7 +362,15 @@ async def resolve_scan(kind: str, token: str, db: AsyncSession = Depends(get_db)
             "path": f"/filament/products/{row.id}?add=1",
         }
     if found == "bin":
-        return {"kind": "bin", "id": str(row.id), "name": row.name, "public_code": row.public_code, "path": "/inventory"}
+        return {"kind": "bin", "id": str(row.id), "name": row.name, "public_code": row.public_code, "path": f"/inventory/bins/{row.id}"}
     if found == "job":
         return {"kind": "job", "id": str(row.id), "path": "/queue"}
+    if found == "order":
+        return {"kind": "order", "id": str(row.id), "name": row.reference, "public_code": row.public_code, "path": f"/packing/{row.id}"}
+    if found == "batch":
+        return {"kind": "batch", "id": str(row.id), "name": row.batch_code, "path": f"/production/{row.id}"}
+    if found == "kit":
+        return {"kind": "kit", "id": str(row.id), "name": row.public_code, "path": f"/kits/{row.id}"}
+    if found == "hardware":
+        return {"kind": "hardware", "id": str(row.id), "name": row.name, "path": "/hardware"}
     raise HTTPException(404, "Unknown QR kind")

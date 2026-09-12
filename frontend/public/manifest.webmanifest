@@ -1,7 +1,7 @@
 {
   "name": "Print FarmOS",
   "short_name": "Print FarmOS",
-  "description": "Print farm control — queue, filament, receiving, and labels.",
+  "description": "Print farm MES — queue, QC, packing, filament, bins, and labels.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0f14",

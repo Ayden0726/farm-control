@@ -21,17 +21,14 @@ type Hit = {
 };
 
 const ACTIONS = [
+  { id: "auto", label: "Scan anything", hint: "FarmOS reads the code prefix and opens the right record" },
   { id: "receive", label: "Receive filament", hint: "Scan a FILT- profile barcode to add new rolls" },
-  { id: "find", label: "Find spool", hint: "Scan a unique SPOOL- QR" },
   { id: "assign", label: "Assign spool", hint: "Scan printer QR, then spool QR" },
-  { id: "move", label: "Move spool", hint: "Scan a SPOOL- QR, then pick a location" },
-  { id: "printer", label: "Scan printer", hint: "Opens that printer" },
-  { id: "bin", label: "Scan finished-part bin", hint: "Opens inventory" },
 ];
 
 export default function ScanHubPage() {
   const router = useRouter();
-  const [action, setAction] = useState<string | null>(null);
+  const [action, setAction] = useState<string | null>("auto");
   const [printer, setPrinter] = useState<Hit | null>(null);
   const [confirm, setConfirm] = useState<{ printer: Hit; spool: Hit } | null>(null);
 
@@ -48,30 +45,6 @@ export default function ScanHubPage() {
             return;
           }
           router.push(`/filament/products/${hit.id}?add=1`);
-          return;
-        }
-        if (action === "find" || action === "move") {
-          if (hit.kind !== "spool") {
-            toast.error("Scan a unique spool QR (SPOOL-…).");
-            return;
-          }
-          router.push(hit.path);
-          return;
-        }
-        if (action === "printer") {
-          if (hit.kind !== "printer") {
-            toast.error("Scan a printer QR.");
-            return;
-          }
-          router.push(hit.path);
-          return;
-        }
-        if (action === "bin") {
-          if (hit.kind !== "bin") {
-            toast.error("Scan a bin QR.");
-            return;
-          }
-          router.push(hit.path);
           return;
         }
         if (action === "assign") {
@@ -91,6 +64,7 @@ export default function ScanHubPage() {
           setConfirm({ printer, spool: hit });
           return;
         }
+        toast.success(`Opened ${hit.kind} ${hit.name || hit.public_code || hit.barcode_id || ""}`);
         router.push(hit.path);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Unknown code");
@@ -116,21 +90,28 @@ export default function ScanHubPage() {
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <h2 className="text-2xl font-semibold">SCAN</h2>
-      {!action && (
-        <div className="grid gap-2">
-          {ACTIONS.map((a) => (
-            <Button key={a.id} className="h-16 flex-col items-start px-4 text-left" variant="outline" onClick={() => setAction(a.id)}>
-              <span className="text-base">{a.label}</span>
-              <span className="text-xs font-normal text-zinc-500">{a.hint}</span>
-            </Button>
-          ))}
-        </div>
-      )}
+      <p className="text-sm text-zinc-400">
+        Prefixes route automatically: PRINTER-, SPOOL-, FILT-, BIN-, ORDER-, BATCH-, KIT-, HW-.
+      </p>
+      <div className="grid gap-2">
+        {ACTIONS.map((a) => (
+          <Button
+            key={a.id}
+            className="h-14 flex-col items-start px-4 text-left"
+            variant={action === a.id ? "default" : "outline"}
+            onClick={() => {
+              setAction(a.id);
+              setPrinter(null);
+              setConfirm(null);
+            }}
+          >
+            <span className="text-base">{a.label}</span>
+            <span className="text-xs font-normal text-zinc-500">{a.hint}</span>
+          </Button>
+        ))}
+      </div>
       {action && (
         <div className="space-y-3">
-          <Button variant="ghost" onClick={() => { setAction(null); setPrinter(null); setConfirm(null); }}>
-            Back
-          </Button>
           <div className={confirm ? "hidden" : undefined}>
             {printer && <p className="text-sm text-amber-200">Printer: {printer.name}. Scan the spool.</p>}
             <BarcodeScanner onDetect={onDetect} />
@@ -153,7 +134,14 @@ export default function ScanHubPage() {
             <Button className="h-12 flex-1" onClick={assign}>
               Assign
             </Button>
-            <Button className="h-12 flex-1" variant="outline" onClick={() => { setConfirm(null); setPrinter(null); }}>
+            <Button
+              className="h-12 flex-1"
+              variant="outline"
+              onClick={() => {
+                setConfirm(null);
+                setPrinter(null);
+              }}
+            >
               Cancel
             </Button>
           </div>

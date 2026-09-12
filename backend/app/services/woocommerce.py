@@ -57,9 +57,16 @@ async def import_woocommerce_payload(db: AsyncSession, payload: dict[str, Any]) 
         source="woocommerce",
         woocommerce_id=woo_id,
         status=OrderStatus.new,
+        revenue=float(payload.get("total") or 0),
+        shipping_cost=float(payload.get("shipping_total") or 0),
+        payment_fee=0,
+        due_at=None,
     )
     db.add(order)
     await db.flush()
+    from app.services.codes import next_order_code
+
+    order.public_code = await next_order_code(db, order.reference)
     for item in payload.get("line_items") or []:
         sku = (item.get("sku") or "").strip()
         product = None
@@ -114,3 +121,32 @@ async def pull_recent_orders(db: AsyncSession) -> list[Order]:
             if order:
                 imported.append(order)
     return imported
+
+
+async def push_tracking(order, carrier: str, tracking: str) -> bool:
+    """Best-effort WooCommerce note/status update when a shipment is recorded."""
+    settings = get_settings()
+    if not order.woocommerce_id or not woocommerce_configured():
+        return False
+    url = settings.woocommerce_url.rstrip("/")
+    auth = (settings.woocommerce_key, settings.woocommerce_secret)
+    body = {
+        "status": "completed",
+        "meta_data": [
+            {"key": "_farmos_carrier", "value": carrier},
+            {"key": "_farmos_tracking", "value": tracking},
+        ],
+        "customer_note": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0, auth=auth) as client:
+            resp = await client.put(f"{url}/wp-json/wc/v3/orders/{order.woocommerce_id}", json=body)
+            if resp.status_code < 400:
+                await client.post(
+                    f"{url}/wp-json/wc/v3/orders/{order.woocommerce_id}/notes",
+                    json={"note": f"Shipped via {carrier}. Tracking: {tracking}", "customer_note": True},
+                )
+                return True
+    except Exception:
+        logger.warning("WooCommerce tracking update failed", exc_info=True)
+    return False

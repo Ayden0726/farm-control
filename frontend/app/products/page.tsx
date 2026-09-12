@@ -20,12 +20,20 @@ export default function ProductsPage() {
   const [bom, setBom] = useState<{ part_id: string; quantity: number; is_optional: boolean }[]>([
     { part_id: "", quantity: 1, is_optional: false },
   ]);
+  const [hwBom, setHwBom] = useState<{ hardware_item_id: string; quantity: number; is_optional: boolean }[]>([]);
+  const [hardware, setHardware] = useState<{ id: string; sku: string; name: string }[]>([]);
+  const [presetQty, setPresetQty] = useState("5");
   const [partSku, setPartSku] = useState("");
   const [partName, setPartName] = useState("");
 
   async function load() {
     setProducts(await api<Product[]>("/api/v1/products"));
     setParts(await api<Part[]>("/api/v1/parts"));
+    try {
+      setHardware(await api("/api/v1/hardware"));
+    } catch {
+      setHardware([]);
+    }
   }
   useEffect(() => {
     load();
@@ -57,6 +65,7 @@ export default function ProductsPage() {
           name,
           woocommerce_product_id: wooId ? Number(wooId) : null,
           bom: bom.filter((b) => b.part_id),
+          hardware_bom: hwBom.filter((b) => b.hardware_item_id),
         }),
       });
       toast.success("Product saved. Future SKUs can be added here without code changes.");
@@ -119,6 +128,38 @@ export default function ProductsPage() {
               <Button type="button" variant="outline" onClick={() => setBom((c) => [...c, { part_id: "", quantity: 1, is_optional: false }])}>
                 Add BOM line
               </Button>
+              {hwBom.map((row, idx) => (
+                <div key={`hw-${idx}`} className="grid grid-cols-[1fr_70px] gap-2">
+                  <select
+                    className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                    value={row.hardware_item_id}
+                    onChange={(e) =>
+                      setHwBom((c) => c.map((x, i) => (i === idx ? { ...x, hardware_item_id: e.target.value } : x)))
+                    }
+                  >
+                    <option value="">Hardware…</option>
+                    {hardware.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.sku} {h.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    value={row.quantity}
+                    onChange={(e) =>
+                      setHwBom((c) => c.map((x, i) => (i === idx ? { ...x, quantity: Number(e.target.value) } : x)))
+                    }
+                  />
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setHwBom((c) => [...c, { hardware_item_id: "", quantity: 1, is_optional: false }])}
+              >
+                Add hardware / packaging line
+              </Button>
               <Button type="submit" className="w-full">
                 Save product
               </Button>
@@ -150,6 +191,38 @@ export default function ProductsPage() {
                   <span className="font-mono">×{b.quantity}</span>
                 </div>
               ))}
+              {(p.hardware_bom || []).map((b) => (
+                <div key={b.id} className="flex justify-between text-zinc-400">
+                  <span>
+                    HW {b.sku} {b.is_optional ? "(optional)" : ""}
+                  </span>
+                  <span className="font-mono">×{b.quantity}</span>
+                </div>
+              ))}
+              <div className="flex gap-2 pt-2">
+                <Input className="w-16" value={presetQty} onChange={(e) => setPresetQty(e.target.value)} />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const res = await api<{ batch_code?: string; message?: string }>("/api/v1/presets/produce", {
+                        method: "POST",
+                        body: JSON.stringify({ product_id: p.id, quantity: Number(presetQty), build_stock: false }),
+                      });
+                      toast.success(
+                        res.batch_code
+                          ? `Queued ${presetQty} × ${p.sku} as ${res.batch_code}`
+                          : res.message || "Production requirements created",
+                      );
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Preset failed");
+                    }
+                  }}
+                >
+                  Produce {presetQty} × {p.sku}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

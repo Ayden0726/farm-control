@@ -53,6 +53,22 @@ class PrinterIn(BaseModel):
     assigned_spool_id: UUID | None = None
     maintenance_interval_hours: float = 200
     maintenance_notes: str = ""
+    build_x_mm: float | None = None
+    build_y_mm: float | None = None
+    build_z_mm: float | None = None
+    nozzle_diameter_mm: float | None = None
+    nozzle_material: str = ""
+    supported_materials: list[str] = Field(default_factory=list)
+    max_nozzle_temp_c: float | None = None
+    max_bed_temp_c: float | None = None
+    build_plate_type: str = ""
+    slicer_profile: str = ""
+    camera_snapshot_url: str = ""
+    camera_stream_url: str = ""
+    camera_auth: str | None = None
+    unattended_mode: str = "allowed"
+    avg_power_watts: float = 180
+    machine_rate_per_hour: float = 0
 
 
 class PrinterUpdate(BaseModel):
@@ -66,6 +82,23 @@ class PrinterUpdate(BaseModel):
     assigned_spool_id: UUID | None = None
     maintenance_interval_hours: float | None = None
     maintenance_notes: str | None = None
+    build_x_mm: float | None = None
+    build_y_mm: float | None = None
+    build_z_mm: float | None = None
+    nozzle_diameter_mm: float | None = None
+    nozzle_material: str | None = None
+    supported_materials: list[str] | None = None
+    max_nozzle_temp_c: float | None = None
+    max_bed_temp_c: float | None = None
+    build_plate_type: str | None = None
+    slicer_profile: str | None = None
+    camera_snapshot_url: str | None = None
+    camera_stream_url: str | None = None
+    camera_auth: str | None = None
+    unattended_mode: str | None = None
+    avg_power_watts: float | None = None
+    machine_rate_per_hour: float | None = None
+    current_downtime_reason: str | None = None
 
 
 class PrinterOut(BaseModel):
@@ -101,6 +134,23 @@ class PrinterOut(BaseModel):
     public_code: str | None = None
     assigned_spool_code: str | None = None
     assigned_spool_remaining_g: float | None = None
+    build_x_mm: float | None = None
+    build_y_mm: float | None = None
+    build_z_mm: float | None = None
+    nozzle_diameter_mm: float | None = None
+    nozzle_material: str = ""
+    supported_materials: list[str] = Field(default_factory=list)
+    max_nozzle_temp_c: float | None = None
+    max_bed_temp_c: float | None = None
+    build_plate_type: str = ""
+    slicer_profile: str = ""
+    unattended_mode: str = "allowed"
+    avg_power_watts: float = 180
+    machine_rate_per_hour: float = 0
+    current_downtime_reason: str | None = None
+    camera_configured: bool = False
+    camera_status: str = "offline"
+    camera_proxy_url: str | None = None
 
 
 class PartIn(BaseModel):
@@ -108,6 +158,8 @@ class PartIn(BaseModel):
     name: str
     description: str = ""
     is_active: bool = True
+    min_stock: int = 0
+    target_stock: int = 0
 
 
 class PartOut(BaseModel):
@@ -119,6 +171,8 @@ class PartOut(BaseModel):
     quantity_on_hand: int = 0
     quantity_reserved: int = 0
     quantity_available: int = 0
+    min_stock: int = 0
+    target_stock: int = 0
 
 
 class GCodeOut(BaseModel):
@@ -136,6 +190,16 @@ class GCodeOut(BaseModel):
     file_size_bytes: int
     compatible_printer_ids: list[UUID] = []
     created_at: datetime
+    required_color: str = ""
+    slicer: str = ""
+    slicer_profile: str = ""
+    nozzle_mm: float | None = None
+    layer_height_mm: float | None = None
+    min_bed_x_mm: float | None = None
+    min_bed_y_mm: float | None = None
+    required_nozzle_mm: float | None = None
+    unattended_approved: bool = True
+    production_approved: bool = False
 
 
 class GCodeUpdate(BaseModel):
@@ -147,6 +211,16 @@ class GCodeUpdate(BaseModel):
     notes: str | None = None
     is_archived: bool | None = None
     compatible_printer_ids: list[UUID] | None = None
+    slicer: str | None = None
+    slicer_profile: str | None = None
+    nozzle_mm: float | None = None
+    layer_height_mm: float | None = None
+    min_bed_x_mm: float | None = None
+    min_bed_y_mm: float | None = None
+    required_nozzle_mm: float | None = None
+    unattended_approved: bool | None = None
+    production_approved: bool | None = None
+    required_color: str | None = None
 
 
 class StlOut(BaseModel):
@@ -177,6 +251,12 @@ class BomItemIn(BaseModel):
     is_optional: bool = False
 
 
+class BomHardwareIn(BaseModel):
+    hardware_item_id: UUID
+    quantity: float = 1
+    is_optional: bool = False
+
+
 class ProductIn(BaseModel):
     sku: str
     name: str
@@ -184,6 +264,7 @@ class ProductIn(BaseModel):
     woocommerce_product_id: int | None = None
     is_active: bool = True
     bom: list[BomItemIn] = Field(default_factory=list)
+    hardware_bom: list[BomHardwareIn] = Field(default_factory=list)
 
 
 class BomItemOut(BaseModel):
@@ -195,6 +276,15 @@ class BomItemOut(BaseModel):
     is_optional: bool
 
 
+class BomHardwareOut(BaseModel):
+    id: UUID
+    hardware_item_id: UUID
+    sku: str
+    name: str
+    quantity: float
+    is_optional: bool
+
+
 class ProductOut(BaseModel):
     id: UUID
     sku: str
@@ -203,6 +293,7 @@ class ProductOut(BaseModel):
     woocommerce_product_id: int | None
     is_active: bool
     bom: list[BomItemOut] = []
+    hardware_bom: list[BomHardwareOut] = []
 
 
 class ProductionItemIn(BaseModel):
@@ -248,6 +339,7 @@ class ProductionRunOut(BaseModel):
     printing_jobs: int = 0
     completed_jobs: int = 0
     failed_jobs: int = 0
+    batch_code: str | None = None
 
 
 class JobOut(BaseModel):
@@ -282,6 +374,9 @@ class JobOut(BaseModel):
     required_material: str | None = None
     required_color: str | None = None
     spool_code: str | None = None
+    compatibility_override: bool = False
+    incompatibility_reason: str = ""
+    batch_code: str | None = None
 
 
 class JobAction(BaseModel):
@@ -293,6 +388,7 @@ class QcIn(BaseModel):
     passed: int
     failed: int
     notes: str = ""
+    failure_reason: str = ""
 
 
 class QcBatchOut(BaseModel):
@@ -309,6 +405,8 @@ class QcBatchOut(BaseModel):
     created_at: datetime
     inspected_at: datetime | None
     gcode_filename: str | None = None
+    failure_reason: str = ""
+    result: str = ""
 
 
 class SpoolIn(BaseModel):
@@ -400,6 +498,17 @@ class OrderOut(BaseModel):
     created_at: datetime
     lines: list[OrderLineOut]
     part_needs: list[OrderPartNeedOut]
+    public_code: str | None = None
+    packing_status: str = "unpacked"
+    packed_at: datetime | None = None
+    packing_override: bool = False
+    packing_notes: str = ""
+    revenue: float = 0
+    shipping_cost: float = 0
+    payment_fee: float = 0
+    carrier: str = ""
+    tracking_number: str = ""
+    due_at: datetime | None = None
 
 
 class NotificationOut(BaseModel):
@@ -446,6 +555,9 @@ class BinOut(BaseModel):
     qr_token: str
     public_code: str | None = None
     kind: str = "finished_part"
+    quantity_on_hand: int = 0
+    quantity_reserved: int = 0
+    quantity_available: int = 0
 
 
 class SettingsOut(BaseModel):
@@ -461,6 +573,19 @@ class SettingsOut(BaseModel):
     pack_bed_x_mm: float = 220.0
     pack_bed_y_mm: float = 220.0
     pack_gap_mm: float = 8.0
+    auto_requeue_failed_qc: bool = True
+    electricity_price_per_kwh: float = 0.32
+    labour_rate_per_hour: float = 0.0
+    enable_electricity_cost: bool = True
+    enable_machine_cost: bool = True
+    enable_labour_cost: bool = False
+    enable_failure_cost: bool = True
+    payment_fee_percent: float = 0.0
+    overnight_start_hour: int = 22
+    overnight_end_hour: int = 7
+    backup_retention_days: int = 14
+    backup_include_files: bool = False
+    include_camera_in_notifications: bool = False
 
 
 class SettingsIn(BaseModel):
@@ -473,3 +598,16 @@ class SettingsIn(BaseModel):
     pack_bed_x_mm: float | None = Field(default=None, gt=0, le=2000)
     pack_bed_y_mm: float | None = Field(default=None, gt=0, le=2000)
     pack_gap_mm: float | None = Field(default=None, ge=0, le=100)
+    auto_requeue_failed_qc: bool | None = None
+    electricity_price_per_kwh: float | None = None
+    labour_rate_per_hour: float | None = None
+    enable_electricity_cost: bool | None = None
+    enable_machine_cost: bool | None = None
+    enable_labour_cost: bool | None = None
+    enable_failure_cost: bool | None = None
+    payment_fee_percent: float | None = None
+    overnight_start_hour: int | None = None
+    overnight_end_hour: int | None = None
+    backup_retention_days: int | None = None
+    backup_include_files: bool | None = None
+    include_camera_in_notifications: bool | None = None

@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import FilamentProduct, FilamentSpool, PartBin, PrintJob, Printer
+from app.models import AssemblyKit, FilamentProduct, FilamentSpool, HardwareItem, Order, PartBin, PrintJob, Printer, ProductionRun
 
 
 def slug_part(text: str, max_len: int = 8) -> str:
@@ -108,6 +108,14 @@ def parse_scan_payload(raw: str) -> tuple[str | None, str]:
         return "bin", text
     if upper.startswith("JOB-"):
         return "job", text
+    if upper.startswith("ORDER-"):
+        return "order", text
+    if upper.startswith("BATCH-"):
+        return "batch", text
+    if upper.startswith("KIT-"):
+        return "kit", text
+    if upper.startswith("HW-"):
+        return "hardware", text
     return None, text
 
 
@@ -155,4 +163,30 @@ async def resolve_code(db: AsyncSession, raw: str):
         ).scalar_one_or_none()
         if job:
             return {"kind": "job", "row": job}
+    if kind in {None, "order"} or token.upper().startswith("ORDER-"):
+        order = (
+            await db.execute(select(Order).where((Order.public_code == token) | (Order.reference == token)))
+        ).scalar_one_or_none()
+        if order:
+            return {"kind": "order", "row": order}
+    if kind in {None, "batch"} or token.upper().startswith("BATCH-"):
+        run = (
+            await db.execute(select(ProductionRun).where(ProductionRun.batch_code == token))
+        ).scalar_one_or_none()
+        if run:
+            return {"kind": "batch", "row": run}
+    if kind in {None, "kit"} or token.upper().startswith("KIT-"):
+        kit = (await db.execute(select(AssemblyKit).where(AssemblyKit.public_code == token))).scalar_one_or_none()
+        if kit:
+            return {"kind": "kit", "row": kit}
+    if kind in {None, "hardware"} or token.upper().startswith("HW-"):
+        hw = (
+            await db.execute(
+                select(HardwareItem).where(
+                    (HardwareItem.public_code == token) | (HardwareItem.sku == token) | (HardwareItem.barcode == token)
+                )
+            )
+        ).scalar_one_or_none()
+        if hw:
+            return {"kind": "hardware", "row": hw}
     return None

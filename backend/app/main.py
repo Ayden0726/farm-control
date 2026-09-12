@@ -17,10 +17,13 @@ from app.routers.catalog import gcode_router, parts_router, stl_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.filament import router as filament_router
 from app.routers.filament_ops import router as filament_ops_router
+from app.routers.hardware import router as hardware_router
 from app.routers.inventory import router as inventory_router
 from app.routers.labels import router as labels_router
+from app.routers.mes import router as mes_router
 from app.routers.notify_api import router as notify_router
 from app.routers.orders import router as orders_router
+from app.routers.planner import router as planner_router
 from app.routers.printers import router as printers_router
 from app.routers.production import router as production_router
 from app.routers.products import router as products_router
@@ -77,9 +80,11 @@ async def lifespan(app: FastAPI):
         try:
             from app.seed_filament import ensure_filament_system
             from app.services.notifications import ensure_defaults
+            from app.services.seed_mes import ensure_mes_defaults
 
             await ensure_defaults(db)
             await ensure_filament_system(db)
+            await ensure_mes_defaults(db)
             await db.commit()
         except Exception:
             logger.exception("startup seed failed — API will still serve first-run setup")
@@ -130,12 +135,14 @@ def create_app() -> FastAPI:
     application.include_router(printers_router, prefix=api)
     application.include_router(queue_router, prefix=api)
     application.include_router(production_router, prefix=api)
+    application.include_router(planner_router, prefix=api)
     application.include_router(parts_router, prefix=api)
     application.include_router(gcode_router, prefix=api)
     application.include_router(stl_router, prefix=api)
     application.include_router(inventory_router, prefix=api)
     application.include_router(filament_ops_router, prefix=api)
     application.include_router(filament_router, prefix=api)
+    application.include_router(hardware_router, prefix=api)
     application.include_router(purchasing_router, prefix=api)
     application.include_router(labels_router, prefix=api)
     application.include_router(products_router, prefix=api)
@@ -148,6 +155,7 @@ def create_app() -> FastAPI:
     application.include_router(system_router, prefix=api)
     application.include_router(qr_router, prefix=api)
     application.include_router(scan_router, prefix=api)
+    application.include_router(mes_router, prefix=api)
 
     @application.get("/health")
     async def health():

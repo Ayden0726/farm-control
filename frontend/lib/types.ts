@@ -36,6 +36,23 @@ export type Printer = {
   filament_material?: string | null;
   estimated_filament_used_g?: number;
   estimated_filament_cost?: number;
+  build_x_mm?: number | null;
+  build_y_mm?: number | null;
+  build_z_mm?: number | null;
+  nozzle_diameter_mm?: number | null;
+  nozzle_material?: string;
+  supported_materials?: string[];
+  max_nozzle_temp_c?: number | null;
+  max_bed_temp_c?: number | null;
+  build_plate_type?: string;
+  slicer_profile?: string;
+  unattended_mode?: string;
+  avg_power_watts?: number;
+  machine_rate_per_hour?: number;
+  current_downtime_reason?: string | null;
+  camera_configured?: boolean;
+  camera_status?: string;
+  public_code?: string | null;
 };
 
 export type Job = {
@@ -67,6 +84,9 @@ export type Job = {
   hold_reason?: string | null;
   filament_required_g?: number;
   filament_available_g?: number;
+  compatibility_override?: boolean;
+  incompatibility_reason?: string;
+  batch_code?: string | null;
 };
 
 export type RunItem = {
@@ -96,6 +116,7 @@ export type ProductionRun = {
   printing_jobs: number;
   completed_jobs: number;
   failed_jobs: number;
+  batch_code?: string | null;
 };
 
 export type Part = {
@@ -107,6 +128,8 @@ export type Part = {
   quantity_on_hand: number;
   quantity_reserved: number;
   quantity_available: number;
+  min_stock?: number;
+  target_stock?: number;
 };
 
 export type GCode = {
@@ -122,6 +145,16 @@ export type GCode = {
   is_archived: boolean;
   notes: string;
   compatible_printer_ids: string[];
+  slicer?: string;
+  slicer_profile?: string;
+  nozzle_mm?: number | null;
+  layer_height_mm?: number | null;
+  min_bed_x_mm?: number | null;
+  min_bed_y_mm?: number | null;
+  required_nozzle_mm?: number | null;
+  unattended_approved?: boolean;
+  production_approved?: boolean;
+  created_at?: string;
 };
 
 export type Stl = {
@@ -157,6 +190,19 @@ export type FarmSettings = {
   pack_bed_x_mm: number;
   pack_bed_y_mm: number;
   pack_gap_mm: number;
+  auto_requeue_failed_qc?: boolean;
+  electricity_price_per_kwh?: number;
+  labour_rate_per_hour?: number;
+  enable_electricity_cost?: boolean;
+  enable_machine_cost?: boolean;
+  enable_labour_cost?: boolean;
+  enable_failure_cost?: boolean;
+  payment_fee_percent?: number;
+  overnight_start_hour?: number;
+  overnight_end_hour?: number;
+  backup_retention_days?: number;
+  backup_include_files?: boolean;
+  include_camera_in_notifications?: boolean;
 };
 
 export type Spool = {
@@ -195,6 +241,17 @@ export type Order = {
     reserved_qty: number;
     to_produce: number;
   }[];
+  public_code?: string | null;
+  packing_status?: string;
+  packed_at?: string | null;
+  packing_override?: boolean;
+  packing_notes?: string;
+  revenue?: number;
+  shipping_cost?: number;
+  payment_fee?: number;
+  carrier?: string;
+  tracking_number?: string;
+  due_at?: string | null;
 };
 
 export type Product = {
@@ -205,6 +262,14 @@ export type Product = {
   woocommerce_product_id: number | null;
   is_active: boolean;
   bom: { id: string; part_id: string; part_sku: string; part_name: string; quantity: number; is_optional: boolean }[];
+  hardware_bom?: {
+    id: string;
+    hardware_item_id: string;
+    sku: string;
+    name: string;
+    quantity: number;
+    is_optional: boolean;
+  }[];
 };
 
 export type Dashboard = {

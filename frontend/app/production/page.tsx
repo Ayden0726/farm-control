@@ -162,7 +162,7 @@ export default function ProductionPage() {
               <div>
                 <CardTitle>
                   <Link href={`/production/${run.id}`} className="hover:text-amber-200">
-                    {run.name}
+                    {run.batch_code ? `${run.batch_code} · ${run.name}` : run.name}
                   </Link>
                 </CardTitle>
                 <div className="text-xs text-zinc-500">

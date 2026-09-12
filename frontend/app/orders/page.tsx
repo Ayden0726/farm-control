@@ -119,6 +119,7 @@ export default function OrdersPage() {
             <TableHead>Customer</TableHead>
             <TableHead>Source</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Packing</TableHead>
             <TableHead>To produce</TableHead>
           </TableRow>
         </TableHeader>
@@ -135,6 +136,7 @@ export default function OrdersPage() {
               <TableCell>
                 <StatusPill status={o.status} />
               </TableCell>
+              <TableCell className="text-xs">{o.packing_status || "unpacked"}</TableCell>
               <TableCell>{o.part_needs.reduce((n, p) => n + p.to_produce, 0)}</TableCell>
             </TableRow>
           ))}

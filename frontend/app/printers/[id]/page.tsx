@@ -14,6 +14,7 @@ import { formatDuration, formatHours } from "@/lib/format";
 import { QrDialog } from "@/components/qr-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { PrinterCamera } from "@/components/printer-camera";
 
 export default function PrinterDetailPage() {
   const params = useParams<{ id: string }>();
@@ -29,6 +30,26 @@ export default function PrinterDetailPage() {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<"retire" | "delete" | null>(null);
   const [acting, setActing] = useState(false);
+  const [profile, setProfile] = useState({
+    build_x_mm: "",
+    build_y_mm: "",
+    build_z_mm: "",
+    nozzle_diameter_mm: "",
+    nozzle_material: "",
+    supported_materials: "",
+    max_nozzle_temp_c: "",
+    max_bed_temp_c: "",
+    build_plate_type: "",
+    slicer_profile: "",
+    unattended_mode: "allowed",
+    avg_power_watts: "180",
+    machine_rate_per_hour: "0",
+    camera_snapshot_url: "",
+    camera_stream_url: "",
+    camera_auth: "",
+  });
+  const [downtimeReason, setDowntimeReason] = useState("planned_maintenance");
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   async function load() {
     const p = await api<Printer>(`/api/v1/printers/${params.id}`);
@@ -36,6 +57,24 @@ export default function PrinterDetailPage() {
     setNotes(p.maintenance_notes);
     setIntervalHours(String(p.maintenance_interval_hours));
     setBaseUrl(p.base_url || "");
+    setProfile({
+      build_x_mm: p.build_x_mm != null ? String(p.build_x_mm) : "",
+      build_y_mm: p.build_y_mm != null ? String(p.build_y_mm) : "",
+      build_z_mm: p.build_z_mm != null ? String(p.build_z_mm) : "",
+      nozzle_diameter_mm: p.nozzle_diameter_mm != null ? String(p.nozzle_diameter_mm) : "",
+      nozzle_material: p.nozzle_material || "",
+      supported_materials: (p.supported_materials || []).join(", "),
+      max_nozzle_temp_c: p.max_nozzle_temp_c != null ? String(p.max_nozzle_temp_c) : "",
+      max_bed_temp_c: p.max_bed_temp_c != null ? String(p.max_bed_temp_c) : "",
+      build_plate_type: p.build_plate_type || "",
+      slicer_profile: p.slicer_profile || "",
+      unattended_mode: p.unattended_mode || "allowed",
+      avg_power_watts: String(p.avg_power_watts ?? 180),
+      machine_rate_per_hour: String(p.machine_rate_per_hour ?? 0),
+      camera_snapshot_url: "",
+      camera_stream_url: "",
+      camera_auth: "",
+    });
     setSpools(await api<Spool[]>("/api/v1/filament"));
   }
 
@@ -110,6 +149,17 @@ export default function PrinterDetailPage() {
           <div className="text-sm">
             Current file: <span className="font-mono">{printer.current_file || "—"}</span>
           </div>
+          {printer.camera_configured && (
+            <div className="space-y-2">
+              <PrinterCamera printerId={printer.id} className="h-40 w-full" />
+              <div className="flex items-center justify-between text-xs text-zinc-500">
+                <span>Camera {printer.camera_status || "unknown"} — credentials stay on the server</span>
+                <Button size="xs" variant="outline" onClick={() => setCameraOpen(true)}>
+                  Larger view
+                </Button>
+              </div>
+            </div>
+          )}
           {printer.status === "waiting_for_bed_clear" && (
             <Button
               onClick={async () => {
@@ -256,6 +306,193 @@ export default function PrinterDetailPage() {
           </div>
         </CardContent>
       </Card>
+      <Card className="lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Compatibility profile</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-3">
+          {[
+            ["build_x_mm", "Build X mm"],
+            ["build_y_mm", "Build Y mm"],
+            ["build_z_mm", "Build Z mm"],
+            ["nozzle_diameter_mm", "Nozzle mm"],
+            ["nozzle_material", "Nozzle material"],
+            ["supported_materials", "Materials (comma)"],
+            ["max_nozzle_temp_c", "Max nozzle °C"],
+            ["max_bed_temp_c", "Max bed °C"],
+            ["build_plate_type", "Build plate"],
+            ["slicer_profile", "Slicer profile"],
+            ["avg_power_watts", "Avg watts"],
+            ["machine_rate_per_hour", "Machine $/h"],
+          ].map(([key, label]) => (
+            <div key={key} className="space-y-1">
+              <Label>{label}</Label>
+              <Input
+                value={(profile as Record<string, string>)[key]}
+                onChange={(e) => setProfile({ ...profile, [key]: e.target.value })}
+              />
+            </div>
+          ))}
+          <div className="space-y-1">
+            <Label>Unattended mode</Label>
+            <select
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+              value={profile.unattended_mode}
+              onChange={(e) => setProfile({ ...profile, unattended_mode: e.target.value })}
+            >
+              <option value="allowed">Allowed unattended</option>
+              <option value="supervision">Supervision required</option>
+              <option value="disabled_overnight">Disabled overnight</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label>Camera snapshot URL</Label>
+            <Input
+              value={profile.camera_snapshot_url}
+              onChange={(e) => setProfile({ ...profile, camera_snapshot_url: e.target.value })}
+              placeholder="http://printer/webcam/?action=snapshot"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Camera stream URL</Label>
+            <Input
+              value={profile.camera_stream_url}
+              onChange={(e) => setProfile({ ...profile, camera_stream_url: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Camera auth (stored encrypted)</Label>
+            <Input
+              type="password"
+              value={profile.camera_auth}
+              onChange={(e) => setProfile({ ...profile, camera_auth: e.target.value })}
+              placeholder="user:password"
+            />
+          </div>
+          <Button
+            className="md:col-span-3"
+            onClick={async () => {
+              try {
+                await api(`/api/v1/printers/${printer.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    build_x_mm: profile.build_x_mm ? Number(profile.build_x_mm) : null,
+                    build_y_mm: profile.build_y_mm ? Number(profile.build_y_mm) : null,
+                    build_z_mm: profile.build_z_mm ? Number(profile.build_z_mm) : null,
+                    nozzle_diameter_mm: profile.nozzle_diameter_mm ? Number(profile.nozzle_diameter_mm) : null,
+                    nozzle_material: profile.nozzle_material,
+                    supported_materials: profile.supported_materials
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                    max_nozzle_temp_c: profile.max_nozzle_temp_c ? Number(profile.max_nozzle_temp_c) : null,
+                    max_bed_temp_c: profile.max_bed_temp_c ? Number(profile.max_bed_temp_c) : null,
+                    build_plate_type: profile.build_plate_type,
+                    slicer_profile: profile.slicer_profile,
+                    unattended_mode: profile.unattended_mode,
+                    avg_power_watts: Number(profile.avg_power_watts || 180),
+                    machine_rate_per_hour: Number(profile.machine_rate_per_hour || 0),
+                    camera_snapshot_url: profile.camera_snapshot_url || undefined,
+                    camera_stream_url: profile.camera_stream_url || undefined,
+                    camera_auth: profile.camera_auth || undefined,
+                  }),
+                });
+                toast.success("Printer profile saved");
+                load();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Save failed");
+              }
+            }}
+          >
+            Save compatibility profile
+          </Button>
+        </CardContent>
+      </Card>
+      <Card className="lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Downtime & redistribution</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {printer.current_downtime_reason && (
+            <p className="text-amber-200">Currently down: {printer.current_downtime_reason.replaceAll("_", " ")}</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="h-8 rounded-lg border border-input bg-transparent px-2"
+              value={downtimeReason}
+              onChange={(e) => setDowntimeReason(e.target.value)}
+            >
+              {[
+                "planned_maintenance",
+                "repair",
+                "printer_fault",
+                "network_issue",
+                "filament_change",
+                "waiting_for_bed_clear",
+                "operator_disabled",
+                "unknown",
+              ].map((r) => (
+                <option key={r} value={r}>
+                  {r.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await api(`/api/v1/printers/${printer.id}/downtime`, {
+                  method: "POST",
+                  body: JSON.stringify({ reason: downtimeReason }),
+                });
+                toast.success("Downtime recorded");
+                load();
+              }}
+            >
+              Start downtime
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await api(`/api/v1/printers/${printer.id}/downtime/end`, { method: "POST" });
+                toast.success("Printer back in service");
+                load();
+              }}
+            >
+              End downtime
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  const res = await api<{ moved: unknown[]; skipped: unknown[] }>(
+                    `/api/v1/printers/${printer.id}/redistribute`,
+                    { method: "POST" },
+                  );
+                  toast.success(`Moved ${res.moved.length} queued jobs. ${res.skipped.length} skipped (including any active print).`);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Redistribute failed");
+                }
+              }}
+            >
+              Redistribute queued jobs
+            </Button>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Redistribute never moves an actively printing job. Alternatives are chosen by compatibility and estimated finish.
+          </p>
+        </CardContent>
+      </Card>
+      <Dialog open={cameraOpen} onOpenChange={setCameraOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{printer.name} camera</DialogTitle>
+          </DialogHeader>
+          {printer.camera_configured ? (
+            <PrinterCamera printerId={printer.id} className="h-[60vh] w-full" refreshMs={2000} />
+          ) : (
+            <p className="text-sm text-zinc-500">No camera configured.</p>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

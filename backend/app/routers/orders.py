@@ -56,6 +56,17 @@ def _order_out(order: Order) -> OrderOut:
             )
             for n in order.part_needs
         ],
+        public_code=getattr(order, "public_code", None),
+        packing_status=getattr(order, "packing_status", None) or "unpacked",
+        packed_at=getattr(order, "packed_at", None),
+        packing_override=bool(getattr(order, "packing_override", False)),
+        packing_notes=getattr(order, "packing_notes", "") or "",
+        revenue=getattr(order, "revenue", 0) or 0,
+        shipping_cost=getattr(order, "shipping_cost", 0) or 0,
+        payment_fee=getattr(order, "payment_fee", 0) or 0,
+        carrier=getattr(order, "carrier", "") or "",
+        tracking_number=getattr(order, "tracking_number", "") or "",
+        due_at=getattr(order, "due_at", None),
     )
 
 
@@ -86,6 +97,9 @@ async def create_order(
     )
     db.add(order)
     await db.flush()
+    from app.services.codes import next_order_code
+
+    order.public_code = await next_order_code(db, order.reference)
     for line in payload.lines:
         db.add(OrderLine(order_id=order.id, product_id=line.product_id, quantity=line.quantity))
     await db.flush()
@@ -99,7 +113,35 @@ async def create_order(
             )
         await create_production_for_order(db, order, printer_ids)
     await db.commit()
-    order = (await db.execute(select(Order).options(*_LOAD).where(Order.id == order.id))).scalar_one()
+    order = (
+        await db.execute(select(Order).options(*_LOAD).where(Order.id == order.id))
+    ).scalar_one()
+    return _order_out(order)
+
+
+@router.post("/orders/{order_id}/cancel", response_model=OrderOut)
+async def cancel_order(
+    order_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
+    from app.models import OrderStatus
+    from app.services.audit import record_audit
+    from app.services.inventory import release_reservation
+
+    order = (await db.execute(select(Order).options(*_LOAD).where(Order.id == order_id))).scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.status == OrderStatus.shipped:
+        raise HTTPException(400, "Shipped orders cannot be cancelled")
+    for need in order.part_needs:
+        if need.reserved_qty:
+            await release_reservation(db, need.part_id, need.reserved_qty)
+            need.reserved_qty = 0
+    order.status = OrderStatus.cancelled
+    await record_audit(
+        db, action="order_cancelled", entity_type="order", entity_id=str(order.id), actor=user.email
+    )
+    await db.commit()
+    order = (await db.execute(select(Order).options(*_LOAD).where(Order.id == order_id))).scalar_one()
     return _order_out(order)
 
 

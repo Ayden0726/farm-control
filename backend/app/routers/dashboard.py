@@ -143,6 +143,46 @@ async def dashboard(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
             }
         )
 
+    from app.models import FinishedPartStock, HardwareItem
+    from datetime import timedelta as _td
+
+    parts_stock = (await db.execute(select(FinishedPartStock))).scalars().all()
+    low_parts = 0
+    from app.models import Part as PartModel
+
+    parts_by_id = {p.id: p for p in (await db.execute(select(PartModel))).scalars().all()}
+    for stock in parts_stock:
+        part = parts_by_id.get(stock.part_id)
+        min_s = part.min_stock if part else 0
+        if stock.quantity_available < (min_s or 0) and min_s:
+            low_parts += 1
+    hw_rows = (await db.execute(select(HardwareItem).where(HardwareItem.is_active.is_(True)))).scalars().all()
+    low_hw = [h for h in hw_rows if h.quantity_available < (h.min_stock or 0)]
+    pack_hw = [h for h in low_hw if (h.category or "").lower() in {"packaging", "shipping", "labels"}]
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    qc_today = (
+        await db.execute(select(QcBatch).where(QcBatch.inspected_at >= today))
+    ).scalars().all()
+    failed_today = sum(b.failed or 0 for b in qc_today)
+    printed_today = sum(b.quantity or 0 for b in qc_today)
+    passed_today = sum(b.passed or 0 for b in qc_today)
+    defects: dict[str, int] = {}
+    for b in qc_today:
+        if b.failure_reason and b.failed:
+            defects[b.failure_reason] = defects.get(b.failure_reason, 0) + b.failed
+    common_defect = max(defects, key=defects.get) if defects else None
+    completed_jobs_today = (
+        await db.execute(
+            select(PrintJob).where(PrintJob.status == JobStatus.completed, PrintJob.completed_at >= today)
+        )
+    ).scalars().all()
+    shipped_today = [o for o in orders if o.status == OrderStatus.shipped]
+    # utilisation
+    enabled = printers
+    printing_n = len([p for p in enabled if p.status == PrinterStatus.printing])
+    util = round(100 * printing_n / max(1, len(enabled)), 1)
+    revenue_today = sum(getattr(o, "revenue", 0) or 0 for o in (await db.execute(select(Order).where(Order.created_at >= today))).scalars().all())
+
     return {
         "generated_at": now.isoformat(),
         "counts": {
@@ -159,6 +199,8 @@ async def dashboard(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
             "low_filament": len(low_spools),
             "unread_notifications": len(unread),
             "awaiting_qc": len(awaiting_qc),
+            "in_production_orders": len([o for o in orders if o.status == OrderStatus.in_production]),
+            "ready_to_pack": len([o for o in orders if o.packing_status == "unpacked" and o.status == OrderStatus.ready_to_ship]),
         },
         "printers": printer_cards,
         "waiting_for_bed_clear": [printer_out(p).model_dump(mode="json") for p in waiting],
@@ -197,4 +239,24 @@ async def dashboard(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
             }
             for s in low_spools
         ],
+        "manufacturing": {
+            "parts_low": low_parts,
+            "hardware_low": len(low_hw),
+            "packaging_low": len(pack_hw),
+            "first_pass_yield": round(100 * passed_today / max(1, printed_today), 1) if printed_today else None,
+            "failed_parts_today": failed_today,
+            "most_common_defect": common_defect,
+            "parts_produced_today": passed_today,
+            "printer_utilisation_pct": util,
+            "orders_new": len([o for o in orders if o.status == OrderStatus.new]),
+            "waiting_production": len([o for o in orders if o.status == OrderStatus.awaiting_production]),
+            "in_production": len([o for o in orders if o.status == OrderStatus.in_production]),
+            "waiting_qc": len([o for o in orders if o.status == OrderStatus.awaiting_qc]),
+            "ready_to_pack": len(
+                [o for o in orders if o.status == OrderStatus.ready_to_ship and o.packing_status != "packed"]
+            ),
+            "ready_to_ship": len([o for o in orders if o.status == OrderStatus.ready_to_ship]),
+            "revenue_today": round(revenue_today, 2),
+            "print_cost_today": round(sum(j.filament_cost or 0 for j in completed_jobs_today), 2),
+        },
     }

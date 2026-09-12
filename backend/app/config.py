@@ -60,11 +60,30 @@ class Settings(BaseSettings):
     def qr_dir(self) -> Path:
         return self.upload_dir / "qr"
 
+    @property
+    def qc_dir(self) -> Path:
+        return self.upload_dir / "qc"
+
+    @property
+    def backup_dir(self) -> Path:
+        return self.upload_dir / "backups"
+
+    @property
+    def snapshots_dir(self) -> Path:
+        return self.upload_dir / "snapshots"
+
 
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    for path in (settings.gcode_dir, settings.stl_dir, settings.qr_dir):
+    for path in (
+        settings.gcode_dir,
+        settings.stl_dir,
+        settings.qr_dir,
+        settings.qc_dir,
+        settings.backup_dir,
+        settings.snapshots_dir,
+    ):
         try:
             path.mkdir(parents=True, exist_ok=True)
         except OSError:

@@ -24,13 +24,28 @@ type Log = {
   notes: string;
 };
 
+type Task = {
+  id: string;
+  name: string;
+  status: string;
+  printer_name: string;
+  due_at: string | null;
+  notes: string;
+};
+
 export default function MaintenancePage() {
   const [due, setDue] = useState<Due[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   async function load() {
     setDue(await api<Due[]>("/api/v1/maintenance/due"));
     setLogs(await api<Log[]>("/api/v1/maintenance"));
+    try {
+      setTasks(await api<Task[]>("/api/v1/maintenance/tasks"));
+    } catch {
+      setTasks([]);
+    }
   }
   useEffect(() => {
     load();
@@ -65,6 +80,38 @@ export default function MaintenancePage() {
               >
                 Log service
               </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Rule-based tasks</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {tasks.length === 0 && <p className="text-sm text-zinc-500">No automated maintenance tasks yet.</p>}
+          {tasks.map((t) => (
+            <div key={t.id} className="flex items-center justify-between rounded-md border border-white/8 p-3 text-sm">
+              <div>
+                <div className="font-medium">
+                  {t.printer_name} · {t.name}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {t.status}
+                  {t.due_at ? ` · due ${new Date(t.due_at).toLocaleString()}` : ""}
+                </div>
+              </div>
+              {t.status !== "complete" && (
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await api(`/api/v1/maintenance/tasks/${t.id}/complete`, { method: "POST" });
+                    load();
+                  }}
+                >
+                  Complete
+                </Button>
+              )}
             </div>
           ))}
         </CardContent>
