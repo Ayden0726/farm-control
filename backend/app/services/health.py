@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import BackupRecord, NotificationProviderSetting, Printer, PrinterStatus
 from app.config import get_settings
 from app.services.woocommerce import woocommerce_configured
+from app.services.shopify import shopify_config, shopify_configured
 from sqlalchemy import text
 import shutil
 
@@ -59,6 +60,12 @@ async def collect_health(db: AsyncSession) -> dict:
         add("WooCommerce", "healthy", "Credentials configured")
     else:
         add("WooCommerce", "warning", "Not configured")
+
+    shopify = await shopify_config(db)
+    if shopify_configured(shopify):
+        add("Shopify", "healthy", f"Shop {shopify['shop']}")
+    else:
+        add("Shopify", "warning", "Not configured")
 
     providers = (await db.execute(select(NotificationProviderSetting))).scalars().all()
     enabled = [p for p in providers if p.enabled]

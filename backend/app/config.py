@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     woocommerce_url: str = ""
     woocommerce_key: str = ""
     woocommerce_secret: str = ""
+    shopify_shop: str = ""
+    shopify_access_token: str = ""
+    shopify_webhook_secret: str = ""
+    shopify_api_version: str = "2024-10"
     public_app_url: str = "http://127.0.0.1:43123"
     app_version: str = "dev"
     update_control_dir: Path = Path("/update-control")

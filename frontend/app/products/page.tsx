@@ -17,6 +17,7 @@ export default function ProductsPage() {
   const [sku, setSku] = useState("");
   const [name, setName] = useState("");
   const [wooId, setWooId] = useState("");
+  const [shopifyId, setShopifyId] = useState("");
   const [bom, setBom] = useState<{ part_id: string; quantity: number; is_optional: boolean }[]>([
     { part_id: "", quantity: 1, is_optional: false },
   ]);
@@ -64,6 +65,7 @@ export default function ProductsPage() {
           sku,
           name,
           woocommerce_product_id: wooId ? Number(wooId) : null,
+          shopify_product_id: shopifyId.trim() || null,
           bom: bom.filter((b) => b.part_id),
           hardware_bom: hwBom.filter((b) => b.hardware_item_id),
         }),
@@ -92,6 +94,11 @@ export default function ProductsPage() {
               <Input placeholder="SKU" value={sku} onChange={(e) => setSku(e.target.value)} required />
               <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
               <Input placeholder="WooCommerce product ID (optional)" value={wooId} onChange={(e) => setWooId(e.target.value)} />
+              <Input
+                placeholder="Shopify product ID (optional)"
+                value={shopifyId}
+                onChange={(e) => setShopifyId(e.target.value)}
+              />
               {bom.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-[1fr_70px_auto] gap-2">
                   <select
@@ -183,6 +190,13 @@ export default function ProductsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1 text-sm">
+              {(p.woocommerce_product_id || p.shopify_product_id) && (
+                <div className="text-xs text-zinc-500">
+                  {p.woocommerce_product_id ? `Woo #${p.woocommerce_product_id}` : ""}
+                  {p.woocommerce_product_id && p.shopify_product_id ? " · " : ""}
+                  {p.shopify_product_id ? `Shopify #${p.shopify_product_id}` : ""}
+                </div>
+              )}
               {p.bom.map((b) => (
                 <div key={b.id} className="flex justify-between">
                   <span>

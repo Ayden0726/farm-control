@@ -54,6 +54,7 @@ export default function OrderDetailPage() {
           <h2 className="text-xl font-semibold">{order.reference}</h2>
           <p className="text-sm text-muted-foreground">
             {order.customer_name} · {order.customer_email} · {order.source}
+            {order.shopify_id ? ` · Shopify ${order.shopify_id}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">

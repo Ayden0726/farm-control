@@ -262,6 +262,7 @@ class ProductIn(BaseModel):
     name: str
     description: str = ""
     woocommerce_product_id: int | None = None
+    shopify_product_id: str | None = None
     is_active: bool = True
     bom: list[BomItemIn] = Field(default_factory=list)
     hardware_bom: list[BomHardwareIn] = Field(default_factory=list)
@@ -291,6 +292,7 @@ class ProductOut(BaseModel):
     name: str
     description: str
     woocommerce_product_id: int | None
+    shopify_product_id: str | None = None
     is_active: bool
     bom: list[BomItemOut] = []
     hardware_bom: list[BomHardwareOut] = []
@@ -491,6 +493,7 @@ class OrderOut(BaseModel):
     notes: str
     source: str
     woocommerce_id: int | None
+    shopify_id: str | None = None
     status: str
     shipping_status: str
     shipped_at: datetime | None
@@ -564,6 +567,9 @@ class SettingsOut(BaseModel):
     company_name: str
     woocommerce_url: str
     woocommerce_configured: bool
+    shopify_shop: str = ""
+    shopify_configured: bool = False
+    shopify_api_version: str = "2024-10"
     notify_webhook_configured: bool
     simulated_time_scale: float
     filament_low_grams: float
@@ -593,6 +599,10 @@ class SettingsIn(BaseModel):
     woocommerce_url: str | None = None
     woocommerce_key: str | None = None
     woocommerce_secret: str | None = None
+    shopify_shop: str | None = None
+    shopify_access_token: str | None = None
+    shopify_webhook_secret: str | None = None
+    shopify_api_version: str | None = None
     notify_webhook_url: str | None = None
     auto_part_ejection: bool | None = None
     pack_bed_x_mm: float | None = Field(default=None, gt=0, le=2000)

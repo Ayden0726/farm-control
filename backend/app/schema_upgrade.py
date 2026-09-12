@@ -118,6 +118,10 @@ TABLE_COLUMNS = {
         "carrier": "VARCHAR(80) DEFAULT ''",
         "tracking_number": "VARCHAR(120) DEFAULT ''",
         "public_code": "VARCHAR(40)",
+        "shopify_id": "VARCHAR(40)",
+    },
+    "products": {
+        "shopify_product_id": "VARCHAR(40)",
     },
     "purchase_order_lines": {
         "hardware_item_id": "UUID",
@@ -203,6 +207,7 @@ def upgrade_schema(conn: Connection) -> None:
         _add_unique_index(conn, "filament_products", "barcode_id", "ux_filament_products_barcode")
     if "orders" in tables:
         _add_unique_index(conn, "orders", "public_code", "ux_orders_public_code")
+        _add_unique_index(conn, "orders", "shopify_id", "ux_orders_shopify_id")
     if "production_runs" in tables:
         _add_unique_index(conn, "production_runs", "batch_code", "ux_production_runs_batch_code")
     if "purchase_order_lines" in tables:

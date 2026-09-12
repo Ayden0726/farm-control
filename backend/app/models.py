@@ -243,6 +243,7 @@ class Product(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, default="")
     woocommerce_product_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shopify_product_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     bom_items: Mapped[list[BomItem]] = relationship(
@@ -579,6 +580,7 @@ class Order(TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(40), default="manual")
     woocommerce_id: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
+    shopify_id: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.new)
     shipping_status: Mapped[str] = mapped_column(String(40), default="unfulfilled")
     shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

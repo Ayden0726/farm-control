@@ -18,6 +18,13 @@ from app.models import (
 from app.schemas import OrderIn, OrderLineOut, OrderOut, OrderPartNeedOut
 from app.services.orders import apply_inventory_to_order, create_production_for_order, fulfill_order
 from app.services.woocommerce import import_woocommerce_payload, pull_recent_orders, woocommerce_configured
+from app.services.shopify import (
+    import_shopify_payload,
+    pull_recent_orders as pull_shopify_orders,
+    shopify_config,
+    shopify_configured,
+    verify_webhook_hmac,
+)
 
 router = APIRouter(tags=["orders"])
 
@@ -31,6 +38,7 @@ def _order_out(order: Order) -> OrderOut:
         notes=order.notes,
         source=order.source,
         woocommerce_id=order.woocommerce_id,
+        shopify_id=getattr(order, "shopify_id", None),
         status=order.status.value,
         shipping_status=order.shipping_status,
         shipped_at=order.shipped_at,
@@ -189,5 +197,44 @@ async def woo_webhook(
     if "order" not in topic and "id" not in payload:
         return {"ok": True, "ignored": True}
     order = await import_woocommerce_payload(db, payload)
+    await db.commit()
+    return {"ok": True, "order_id": str(order.id) if order else None}
+
+
+@router.post("/shopify/sync")
+async def shopify_sync(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    cfg = await shopify_config(db)
+    if not shopify_configured(cfg):
+        raise HTTPException(
+            400,
+            "Shopify is not configured. Set SHOPIFY_SHOP and SHOPIFY_ACCESS_TOKEN, or save them in Settings.",
+        )
+    imported = await pull_shopify_orders(db)
+    await db.commit()
+    return {"imported": len(imported), "ids": [str(o.id) for o in imported]}
+
+
+@router.post("/shopify/webhook")
+async def shopify_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    x_shopify_topic: str | None = Header(default=None, alias="X-Shopify-Topic"),
+    x_shopify_hmac_sha256: str | None = Header(default=None, alias="X-Shopify-Hmac-Sha256"),
+):
+    raw = await request.body()
+    cfg = await shopify_config(db)
+    if cfg.get("secret"):
+        if not verify_webhook_hmac(raw, x_shopify_hmac_sha256, cfg["secret"]):
+            raise HTTPException(401, "Invalid Shopify webhook signature")
+    topic = (x_shopify_topic or "").lower()
+    if topic and "orders/" not in topic and "order" not in topic:
+        return {"ok": True, "ignored": True}
+    import json
+
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Shopify webhook body was not JSON")
+    order = await import_shopify_payload(db, payload)
     await db.commit()
     return {"ok": True, "order_id": str(order.id) if order else None}

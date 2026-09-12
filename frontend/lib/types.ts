@@ -182,6 +182,9 @@ export type FarmSettings = {
   company_name: string;
   woocommerce_url: string;
   woocommerce_configured: boolean;
+  shopify_shop?: string;
+  shopify_configured?: boolean;
+  shopify_api_version?: string;
   notify_webhook_configured: boolean;
   simulated_time_scale: number;
   app_version: string;
@@ -252,6 +255,7 @@ export type Order = {
   carrier?: string;
   tracking_number?: string;
   due_at?: string | null;
+  shopify_id?: string | null;
 };
 
 export type Product = {
@@ -260,6 +264,7 @@ export type Product = {
   name: string;
   description: string;
   woocommerce_product_id: number | null;
+  shopify_product_id?: string | null;
   is_active: boolean;
   bom: { id: string; part_id: string; part_sku: string; part_name: string; quantity: number; is_optional: boolean }[];
   hardware_bom?: {

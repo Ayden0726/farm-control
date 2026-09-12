@@ -32,6 +32,8 @@ from app.schemas import (
 )
 from app.services.qr import render_qr_png
 from app.services.woocommerce import woocommerce_configured
+from app.services.shopify import normalize_shop, shopify_config, shopify_configured
+from app.security import encrypt_secret
 from app.services.farm_settings import get_automation, get_mes, upsert_automation, upsert_mes
 
 notify_router = APIRouter(prefix="/notifications-legacy-removed", tags=["notifications"])
@@ -266,6 +268,14 @@ async def put_settings(
         integrations["woocommerce_key_set"] = True
     if payload.woocommerce_secret:
         integrations["woocommerce_secret_set"] = True
+    if payload.shopify_shop is not None:
+        integrations["shopify_shop"] = normalize_shop(payload.shopify_shop)
+    if payload.shopify_access_token:
+        integrations["shopify_access_token_enc"] = encrypt_secret(payload.shopify_access_token.strip())
+    if payload.shopify_webhook_secret:
+        integrations["shopify_webhook_secret_enc"] = encrypt_secret(payload.shopify_webhook_secret.strip())
+    if payload.shopify_api_version:
+        integrations["shopify_api_version"] = payload.shopify_api_version.strip()
     if payload.notify_webhook_url is not None:
         integrations["notify_webhook_url"] = payload.notify_webhook_url
     if stored:
@@ -306,10 +316,14 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
     company = await db.get(AppSetting, "company_name")
     automation = await get_automation(db)
     mes = await get_mes(db)
+    shopify = await shopify_config(db)
     return SettingsOut(
         company_name=(company.value if company else "Print Farm"),
         woocommerce_url=settings.woocommerce_url,
         woocommerce_configured=woocommerce_configured(),
+        shopify_shop=shopify.get("shop") or "",
+        shopify_configured=shopify_configured(shopify),
+        shopify_api_version=shopify.get("api_version") or "2024-10",
         notify_webhook_configured=bool(settings.notify_webhook_url),
         simulated_time_scale=settings.simulated_time_scale,
         filament_low_grams=settings.filament_low_grams,

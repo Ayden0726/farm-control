@@ -27,6 +27,10 @@ export default function SettingsPage() {
   const [wooUrl, setWooUrl] = useState("");
   const [wooKey, setWooKey] = useState("");
   const [wooSecret, setWooSecret] = useState("");
+  const [shopifyShop, setShopifyShop] = useState("");
+  const [shopifyToken, setShopifyToken] = useState("");
+  const [shopifyWebhookSecret, setShopifyWebhookSecret] = useState("");
+  const [shopifyApiVersion, setShopifyApiVersion] = useState("2024-10");
   const [autoEject, setAutoEject] = useState(false);
   const [bedX, setBedX] = useState("220");
   const [bedY, setBedY] = useState("220");
@@ -58,6 +62,8 @@ export default function SettingsPage() {
         setSettings(s);
         setCompany(s.company_name);
         setWooUrl(s.woocommerce_url);
+        setShopifyShop(s.shopify_shop || "");
+        setShopifyApiVersion(s.shopify_api_version || "2024-10");
         setAutoEject(Boolean(s.auto_part_ejection));
         setBedX(String(s.pack_bed_x_mm ?? 220));
         setBedY(String(s.pack_bed_y_mm ?? 220));
@@ -115,12 +121,20 @@ export default function SettingsPage() {
           woocommerce_url: wooUrl,
           woocommerce_key: wooKey || undefined,
           woocommerce_secret: wooSecret || undefined,
+          shopify_shop: shopifyShop,
+          shopify_access_token: shopifyToken || undefined,
+          shopify_webhook_secret: shopifyWebhookSecret || undefined,
+          shopify_api_version: shopifyApiVersion || undefined,
         }),
       });
       setSettings(res);
       setWooKey("");
       setWooSecret("");
-      toast.success("Farm settings saved. WooCommerce keys are never displayed after save.");
+      setShopifyToken("");
+      setShopifyWebhookSecret("");
+      setShopifyShop(res.shopify_shop || shopifyShop);
+      setShopifyApiVersion(res.shopify_api_version || shopifyApiVersion);
+      toast.success("Farm settings saved. Store secrets are never displayed after save.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     }
@@ -186,6 +200,51 @@ export default function SettingsPage() {
             <Input type="password" value={wooKey} onChange={(e) => setWooKey(e.target.value)} />
             <Label>Consumer secret</Label>
             <Input type="password" value={wooSecret} onChange={(e) => setWooSecret(e.target.value)} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Shopify</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-zinc-500">
+              Use Shopify instead of WooCommerce, or run both. Env vars SHOPIFY_SHOP, SHOPIFY_ACCESS_TOKEN, and
+              SHOPIFY_WEBHOOK_SECRET win when set. Secrets saved here are encrypted and never shown again.
+              {settings.shopify_configured ? " Shopify is configured." : " Not configured yet."}
+            </p>
+            <Label>Shop</Label>
+            <Input
+              value={shopifyShop}
+              onChange={(e) => setShopifyShop(e.target.value)}
+              placeholder="your-store or your-store.myshopify.com"
+            />
+            <Label>Admin API access token</Label>
+            <Input
+              type="password"
+              value={shopifyToken}
+              onChange={(e) => setShopifyToken(e.target.value)}
+              placeholder={settings.shopify_configured ? "Saved — leave blank to keep" : "shpat_…"}
+            />
+            <Label>Webhook signing secret</Label>
+            <Input
+              type="password"
+              value={shopifyWebhookSecret}
+              onChange={(e) => setShopifyWebhookSecret(e.target.value)}
+              placeholder="Optional, but recommended"
+            />
+            <Label>API version</Label>
+            <Input value={shopifyApiVersion} onChange={(e) => setShopifyApiVersion(e.target.value)} placeholder="2024-10" />
+            <p className="text-xs text-zinc-500">
+              Custom app scopes: <span className="font-mono">read_orders</span>,{" "}
+              <span className="font-mono">write_orders</span>, <span className="font-mono">write_fulfillments</span>.
+              Webhook URL:{" "}
+              <span className="font-mono break-all">
+                {typeof window !== "undefined" ? window.location.origin : ""}/api/v1/shopify/webhook
+              </span>
+              . Topics: <span className="font-mono">orders/create</span>, <span className="font-mono">orders/paid</span>.
+              Line items match SKU first, then the Shopify product ID on the product record.
+            </p>
+            <Button type="submit">Save farm settings</Button>
           </CardContent>
         </Card>
       </form>

@@ -126,6 +126,27 @@ Manual pull: Orders page → Sync WooCommerce.
 
 Imported orders explode the product BOM, reserve finished parts, and queue production for the remainder.
 
+## Shopify
+
+Use Shopify instead of WooCommerce, or run both shops at once. Set in `.env` (never hard-code), or save the shop and token in **Settings** (encrypted at rest):
+
+```
+SHOPIFY_SHOP=your-store.myshopify.com
+SHOPIFY_ACCESS_TOKEN=shpat_...
+SHOPIFY_WEBHOOK_SECRET=
+SHOPIFY_API_VERSION=2024-10
+```
+
+`SHOPIFY_SHOP` can be `your-store`, `your-store.myshopify.com`, or a full admin URL.
+
+Create a custom app in Shopify Admin with `read_orders`, `write_orders`, and `write_fulfillments`. Env values win over Settings when both are set.
+
+Webhook: `POST /api/v1/shopify/webhook`  
+Subscribe to `orders/create` and `orders/paid`. If `SHOPIFY_WEBHOOK_SECRET` (or the Settings secret) is set, FarmOS verifies `X-Shopify-Hmac-Sha256`.  
+Manual pull: Orders page → Sync Shopify.
+
+Line items match **SKU first**, then the product's **Shopify product ID**. Cancelled Shopify orders are ignored. Shipping a FarmOS order with a Shopify ID pushes tracking to Shopify fulfillments, and falls back to an order note if fulfillment is not available.
+
 ## Environment
 
 `./install.sh` fills the required keys. To configure by hand instead:
@@ -141,7 +162,7 @@ Important keys:
 - `SECRET_KEY` — JWT and credential encryption
 - `POSTGRES_PASSWORD`
 - `SIMULATED_TIME_SCALE` — demo printers run faster than wall clock
-- WooCommerce and SMTP / `NOTIFY_WEBHOOK_URL` as needed
+- WooCommerce, Shopify, and SMTP / `NOTIFY_WEBHOOK_URL` as needed
 - Phone push: `NTFY_*`, `PUBLIC_APP_URL`, optional Pushover / Discord / Telegram / Twilio
 
 ## Phone notifications

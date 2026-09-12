@@ -9,6 +9,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import BomHardwareItem, BomItem, HardwareItem, Part, Product, User
 from app.schemas import BomHardwareOut, BomItemOut, ProductIn, ProductOut
+from app.services.shopify import shopify_numeric_id
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -47,6 +48,7 @@ def _product_out(product: Product) -> ProductOut:
         name=product.name,
         description=product.description,
         woocommerce_product_id=product.woocommerce_product_id,
+        shopify_product_id=getattr(product, "shopify_product_id", None),
         is_active=product.is_active,
         bom=bom,
         hardware_bom=hardware,
@@ -84,6 +86,7 @@ async def create_product(
         name=payload.name,
         description=payload.description,
         woocommerce_product_id=payload.woocommerce_product_id,
+        shopify_product_id=shopify_numeric_id(payload.shopify_product_id),
         is_active=payload.is_active,
     )
     db.add(product)
@@ -116,6 +119,7 @@ async def update_product(
     product.name = payload.name
     product.description = payload.description
     product.woocommerce_product_id = payload.woocommerce_product_id
+    product.shopify_product_id = shopify_numeric_id(payload.shopify_product_id)
     product.is_active = payload.is_active
     existing = (await db.execute(select(BomItem).where(BomItem.product_id == product.id))).scalars().all()
     for row in existing:

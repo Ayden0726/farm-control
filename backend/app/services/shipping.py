@@ -96,4 +96,11 @@ async def record_shipment(
             await push_tracking(order, carrier, tracking_number)
         except Exception:
             pass
+    if getattr(order, "shopify_id", None):
+        try:
+            from app.services.shopify import push_tracking as push_shopify_tracking
+
+            await push_shopify_tracking(order, carrier, tracking_number, db)
+        except Exception:
+            pass
     return shipment

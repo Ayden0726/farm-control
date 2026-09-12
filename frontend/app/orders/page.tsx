@@ -59,6 +59,16 @@ export default function OrdersPage() {
     }
   }
 
+  async function syncShopify() {
+    try {
+      const res = await api<{ imported: number }>("/api/v1/shopify/sync", { method: "POST" });
+      toast.success(`Imported ${res.imported} Shopify orders`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Shopify sync failed");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap justify-between gap-2">
@@ -68,6 +78,9 @@ export default function OrdersPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={syncWoo}>
             Sync WooCommerce
+          </Button>
+          <Button variant="outline" onClick={syncShopify}>
+            Sync Shopify
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger render={<Button />}>New order</DialogTrigger>
