@@ -211,15 +211,22 @@ async def delete_gcode(
     job_count = (
         await db.execute(select(func.count()).select_from(PrintJob).where(PrintJob.gcode_file_id == gcode.id))
     ).scalar_one()
-    if job_count:
+    item_count = (
+        await db.execute(
+            select(func.count()).select_from(ProductionRunItem).where(ProductionRunItem.gcode_file_id == gcode.id)
+        )
+    ).scalar_one()
+    if job_count or item_count:
+        reasons = []
+        if job_count:
+            reasons.append(f"{int(job_count)} print job(s)")
+        if item_count:
+            reasons.append(f"{int(item_count)} production run item(s)")
         raise HTTPException(
             400,
-            f"Cannot delete {gcode.filename}: {int(job_count)} print job(s) still reference it. "
-            "Archive it instead so queue history keeps the file it used.",
+            f"Cannot delete {gcode.filename}: {', '.join(reasons)} still reference it. "
+            "Archive it instead so history keeps the file it used.",
         )
-    await db.execute(
-        update(ProductionRunItem).where(ProductionRunItem.gcode_file_id == gcode.id).values(gcode_file_id=None)
-    )
     await db.execute(
         update(ProductionPlanLine).where(ProductionPlanLine.gcode_file_id == gcode.id).values(gcode_file_id=None)
     )
