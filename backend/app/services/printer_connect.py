@@ -63,7 +63,16 @@ def _fixes_for(adapter: str, url: str | None, raw_error: str) -> list[str]:
     elif "name or service not known" in err or "nodename nor servname" in err or "failed to resolve" in err or "getaddrinfo" in err:
         fixes.append("The hostname did not resolve. Use the printer’s numeric IP instead of a .local name.")
     elif "certificate" in err or "ssl" in err:
-        fixes.append("TLS/SSL failed. On a shop LAN use http:// not https:// unless the printer has a real certificate.")
+        fixes.append("TLS/SSL failed. Use http:// (not https://). FarmOS does not need printer certificates.")
+    elif "409" in err:
+        if adapter == "octoprint":
+            fixes.append(
+                "OctoPrint HTTP 409 is not a certificate problem. It means OctoPrint is running but the printer is not connected (USB unplugged, printer off, or OctoPrint → Connection → Connect)."
+            )
+            fixes.append("Keep using http://192.168.x.x — do not switch to https or create TLS certificates.")
+            fixes.append("Connect the printer in the OctoPrint web UI, then try again.")
+        else:
+            fixes.append("The printer rejected the request because of its current state (busy or not connected). Try again when it is idle.")
     elif "401" in err or "403" in err or "unauthorized" in err or "forbidden" in err:
         if adapter == "octoprint":
             fixes.append("OctoPrint rejected the API key. In OctoPrint: Settings → API → copy the Application Key (or a user key) into FarmOS.")
@@ -154,8 +163,15 @@ async def probe_adapter(
             how_to_fix=_fixes_for(adapter_type, url, raw),
         )
 
-    if snap.online:
-        return ConnectionResult(ok=True, status=snap.status or "idle", error=None, how_to_fix=[], snapshot=snap)
+    host_ok = bool((snap.extra or {}).get("control_host_ok"))
+    if snap.online or host_ok:
+        return ConnectionResult(
+            ok=True,
+            status=snap.status or "idle",
+            error=None,
+            how_to_fix=[],
+            snapshot=snap,
+        )
 
     raw = snap.error or "Printer did not respond."
     return ConnectionResult(

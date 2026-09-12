@@ -92,6 +92,8 @@ New hardware is an adapter class, not an application rewrite:
 
 API keys are encrypted at rest and **never** returned to the browser.
 
+Use **http://PRINTER_LAN_IP** (OctoPrint is usually port 80). FarmOS does not require TLS certificates on the printer and ignores self-signed HTTPS if the box redirects. OctoPrint **HTTP 409** while adding a printer means OctoPrint is up but the machine is not connected in OctoPrint (USB/serial). That is not a certificate error — connect the printer in the OctoPrint UI, or save anyway; FarmOS will keep it offline until it is connected.
+
 ## WooCommerce
 
 Set in `.env` (never hard-code):

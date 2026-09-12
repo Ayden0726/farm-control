@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
-
 from app.adapters.base import PrinterAdapter, PrinterSnapshot
+from app.adapters.http import lan_client
 
 
 def _first(*values):
@@ -27,7 +26,7 @@ class MoonrakerAdapter(PrinterAdapter):
             return PrinterSnapshot(online=False, status="offline", error="No Moonraker URL configured")
         query = "print_stats&heater_bed&extruder&display_status&virtual_sdcard"
         try:
-            async with httpx.AsyncClient(timeout=6.0, headers=self._headers()) as client:
+            async with lan_client(6.0, self._headers()) as client:
                 resp = await client.get(f"{self.base_url}/printer/objects/query?{query}")
             if resp.status_code >= 400:
                 return PrinterSnapshot(online=False, status="offline", error=f"Moonraker HTTP {resp.status_code}")
@@ -72,7 +71,7 @@ class MoonrakerAdapter(PrinterAdapter):
 
     async def upload_and_start(self, local_path: str, filename: str) -> None:
         path = Path(local_path)
-        async with httpx.AsyncClient(timeout=60.0, headers=self._headers()) as client:
+        async with lan_client(60.0, self._headers()) as client:
             with path.open("rb") as handle:
                 files = {"file": (filename, handle, "application/octet-stream")}
                 resp = await client.post(f"{self.base_url}/server/files/upload", files=files)
@@ -93,6 +92,6 @@ class MoonrakerAdapter(PrinterAdapter):
         await self._post("/printer/print/cancel")
 
     async def _post(self, path: str) -> None:
-        async with httpx.AsyncClient(timeout=8.0, headers=self._headers()) as client:
+        async with lan_client(8.0, self._headers()) as client:
             resp = await client.post(f"{self.base_url}{path}")
             resp.raise_for_status()

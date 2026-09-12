@@ -57,7 +57,7 @@ export default function PrintersPage() {
     setHowToFix([]);
     setBusy(true);
     try {
-      await api("/api/v1/printers", {
+      const saved = await api<Printer>("/api/v1/printers", {
         method: "POST",
         body: JSON.stringify({
           ...form,
@@ -66,7 +66,11 @@ export default function PrintersPage() {
         }),
         signal: AbortSignal.timeout(45000),
       });
-      toast.success("Connection verified. Printer saved.");
+      toast.success(
+        saved.status === "offline"
+          ? "Host reached. Printer saved as offline until OctoPrint shows it connected."
+          : "Connection verified. Printer saved.",
+      );
       setOpen(false);
       setForm({ name: "", model: "", adapter_type: "octoprint", base_url: "", api_key: "" });
       load();
@@ -172,7 +176,8 @@ export default function PrintersPage() {
                       required
                     />
                     <p className="text-xs text-zinc-500">
-                      Use the printer’s LAN IP as seen from this FarmOS server — not localhost.
+                      Use http:// and the printer’s LAN IP as seen from this FarmOS server — not localhost, and not
+                      https://. FarmOS does not need TLS certificates on OctoPrint.
                     </p>
                   </div>
                   <div className="space-y-1">

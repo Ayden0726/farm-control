@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
-
 from app.adapters.base import PrinterSnapshot
+from app.adapters.http import lan_client
 from app.adapters.moonraker import MoonrakerAdapter
 
 
@@ -22,7 +21,7 @@ class CrealityAdapter(MoonrakerAdapter):
         if not self.base_url:
             return PrinterSnapshot(online=False, status="offline", error="No Creality URL configured")
         try:
-            async with httpx.AsyncClient(timeout=6.0) as client:
+            async with lan_client(6.0) as client:
                 info = await client.get(f"{self.base_url}/info")
                 if info.status_code >= 400:
                     info = await client.post(f"{self.base_url}/protocal.cgi", json={"method": "get_printer_status"})
@@ -47,7 +46,7 @@ class CrealityAdapter(MoonrakerAdapter):
             return
         except Exception:
             path = Path(local_path)
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with lan_client(60.0) as client:
                 with path.open("rb") as handle:
                     resp = await client.post(
                         f"{self.base_url}/upload",

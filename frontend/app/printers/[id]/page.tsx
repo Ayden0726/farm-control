@@ -213,7 +213,8 @@ export default function PrinterDetailPage() {
             <Label>New API key (leave blank to keep current)</Label>
             <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
             <p className="text-xs text-zinc-500">
-              {printer.has_api_key ? "An API key is stored on the server." : "No API key stored."} Credentials are never shown in the UI. Use the printer’s LAN IP, not localhost.
+              {printer.has_api_key ? "An API key is stored on the server." : "No API key stored."} Credentials are never
+              shown in the UI. Use http:// and the printer’s LAN IP, not localhost, and not https://.
             </p>
             {error && (
               <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
