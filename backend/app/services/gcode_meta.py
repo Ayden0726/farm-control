@@ -57,6 +57,8 @@ _UNIT_SECONDS = {
     "seconds": 1,
 }
 _MAX_DURATION_SECONDS = 7 * 86400
+_MIN_FILENAME_GRAMS = 0.01
+_MAX_FILENAME_GRAMS = 100_000
 _FILENAME_BOUND = r"[\s._\-()]"
 _FILENAME_TIME_TOKEN = re.compile(
     rf"(?:^|{_FILENAME_BOUND})("
@@ -64,6 +66,13 @@ _FILENAME_TIME_TOKEN = re.compile(
     rf"|(?:\d+\s*(?:hours?|hrs?|h)[\s._-]*\d{{2}}(?!\s*(?:{_DURATION_UNITS})))"
     rf"|(?:\d{{1,2}}:\d{{2}}(?::\d{{2}})?)"
     rf")(?=$|{_FILENAME_BOUND})",
+    re.IGNORECASE,
+)
+# Longer unit names first so "grams" is not parsed as "g" + leftover text.
+# "gr" is allowed when bounded (Handle-48gr.gcode); "green" is not a bound after "gr".
+_FILENAME_GRAM_UNITS = r"grams?|gr|g"
+_FILENAME_GRAM_TOKEN = re.compile(
+    rf"(?:^|{_FILENAME_BOUND})(\d+(?:\.\d+)?)\s*(?:{_FILENAME_GRAM_UNITS})(?=$|{_FILENAME_BOUND})",
     re.IGNORECASE,
 )
 
@@ -168,6 +177,34 @@ def apply_filename_time_fallback(meta: dict[str, float | int | str], filename: s
     if not seconds:
         return False
     meta["estimated_time_seconds"] = seconds
+    return True
+
+
+def parse_filament_grams_from_filename(filename: str) -> float | None:
+    """Filament mass in grams encoded in a G-code file name, if any.
+
+    Bounded like quantity and time markers: start/end, spaces, dots, underscores,
+    dashes, parentheses. Units: g, gr, gram, grams.
+    """
+    stem = Path(filename or "").stem
+    if not stem:
+        return None
+    found: list[float] = []
+    for match in _FILENAME_GRAM_TOKEN.finditer(stem):
+        grams = _bounded_grams(float(match.group(1)))
+        if grams is not None:
+            found.append(grams)
+    return found[-1] if found else None
+
+
+def apply_filename_filament_fallback(meta: dict[str, float | int | str], filename: str) -> bool:
+    """Use a filename gram amount when slicer comments did not produce a real estimate."""
+    if meta.get("estimated_filament_grams"):
+        return False
+    grams = parse_filament_grams_from_filename(filename)
+    if not grams:
+        return False
+    meta["estimated_filament_grams"] = grams
     return True
 
 
@@ -322,6 +359,12 @@ def _bounded_seconds(seconds: int) -> int | None:
     if seconds < 1 or seconds > _MAX_DURATION_SECONDS:
         return None
     return seconds
+
+
+def _bounded_grams(grams: float) -> float | None:
+    if grams < _MIN_FILENAME_GRAMS or grams > _MAX_FILENAME_GRAMS:
+        return None
+    return round(grams, 2)
 
 
 def _sum_after(content: str, patterns: tuple[str, ...]) -> float | None:

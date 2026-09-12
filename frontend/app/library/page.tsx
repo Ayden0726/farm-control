@@ -152,8 +152,8 @@ export default function LibraryPage() {
             has <span className="font-mono">x4</span>, <span className="font-mono">x8</span>, or any{" "}
             <span className="font-mono">x</span>
             +number, quantity is set to that many of this part on the plate. A print time in the name (
-            <span className="font-mono">2h15m</span>, <span className="font-mono">45m</span>) is used when the file has
-            no slicer time comments.
+            <span className="font-mono">2h15m</span>, <span className="font-mono">45m</span>) or filament in grams (
+            <span className="font-mono">48g</span>) is used when the file has no matching slicer comments.
           </p>
           <Input
             type="file"
@@ -229,7 +229,8 @@ export default function LibraryPage() {
           <h2 className="text-sm font-medium text-zinc-300">G-code (queue)</h2>
           <p className="text-xs text-zinc-500">
             Time and filament come from slicer comments at the start and end of the file (Cura, Prusa, Orca, Bambu).
-            If comments are missing, a time in the filename (<span className="font-mono">2h15m</span>) is used instead.
+            If comments are missing, a time (<span className="font-mono">2h15m</span>) or filament amount (
+            <span className="font-mono">48g</span>) in the filename is used instead.
             Re-read after an upload if an older file still shows the 1 h / 20 g fallback.
           </p>
         </div>

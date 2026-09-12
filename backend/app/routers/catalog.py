@@ -26,6 +26,7 @@ from app.schemas import GCodeOut, GCodeUpdate, PartIn, PartOut, StlOut
 from app.serialize import gcode_out
 from app.services.farm_settings import get_automation
 from app.services.gcode_meta import (
+    apply_filename_filament_fallback,
     apply_filename_time_fallback,
     apply_gcode_estimates,
     parse_gcode_file,
@@ -122,6 +123,7 @@ async def upload_gcode(
     dest.write_bytes(content)
     meta = parse_gcode_file_bytes(content)
     apply_filename_time_fallback(meta, filename)
+    apply_filename_filament_fallback(meta, filename)
     parsed = parse_quantity_from_filename(filename)
     if quantity_per_file is not None:
         qty = max(1, min(int(quantity_per_file), 999))
@@ -204,6 +206,7 @@ async def refresh_gcode_estimates(db: AsyncSession = Depends(get_db), _: User = 
             missing += 1
             continue
         apply_filename_time_fallback(meta, gcode.filename)
+        apply_filename_filament_fallback(meta, gcode.filename)
         if "estimated_time_seconds" not in meta:
             no_time += 1
         if "estimated_filament_grams" not in meta:

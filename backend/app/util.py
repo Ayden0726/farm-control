@@ -44,6 +44,16 @@ def parse_time_from_filename(filename: str) -> int | None:
     return _parse(filename)
 
 
+def parse_filament_grams_from_filename(filename: str) -> float | None:
+    """Filament grams from a G-code file name, e.g. Handle-48g.gcode.
+
+    Returns grams, or None if the stem has no bounded gram token.
+    """
+    from app.services.gcode_meta import parse_filament_grams_from_filename as _parse
+
+    return _parse(filename)
+
+
 def parse_gcode_metadata(content: str) -> dict[str, float | int]:
     """Extract slicer comments for time and filament usage."""
     from app.services.gcode_meta import parse_gcode_metadata as _parse

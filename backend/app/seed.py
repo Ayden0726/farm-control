@@ -34,7 +34,11 @@ from app.models import (
     QcStatus,
     utcnow,
 )
-from app.services.gcode_meta import apply_filename_time_fallback, parse_gcode_file_bytes
+from app.services.gcode_meta import (
+    apply_filename_filament_fallback,
+    apply_filename_time_fallback,
+    parse_gcode_file_bytes,
+)
 from app.services.inventory import get_or_create_stock
 from app.util import new_qr_token, parse_quantity_from_filename
 
@@ -91,6 +95,7 @@ async def seed_demo(db: AsyncSession) -> None:
         path.write_text(_gcode_content(sku, seconds, grams))
         meta = parse_gcode_file_bytes(path.read_bytes())
         apply_filename_time_fallback(meta, filename)
+        apply_filename_filament_fallback(meta, filename)
         gcode = GCodeFile(
             filename=filename,
             stored_path=str(path),
@@ -98,7 +103,7 @@ async def seed_demo(db: AsyncSession) -> None:
             quantity_per_file=parse_quantity_from_filename(filename),
             material=material,
             estimated_time_seconds=int(meta.get("estimated_time_seconds") or seconds),
-            estimated_filament_grams=grams,
+            estimated_filament_grams=float(meta.get("estimated_filament_grams") or grams),
             required_color="Black" if material == "PETG" else "Grey",
             version=1,
             notes="Demo library file. Replace with production-sliced G-code when ready.",
