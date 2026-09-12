@@ -215,5 +215,9 @@ def upgrade_schema(conn: Connection) -> None:
             conn.execute(text("ALTER TABLE production_runs ALTER COLUMN product_id DROP NOT NULL"))
     if "purchase_order_lines" in tables:
         conn.execute(text("ALTER TABLE purchase_order_lines ALTER COLUMN product_id DROP NOT NULL"))
+    if "production_run_items" in tables:
+        item_cols = {c["name"] for c in inspect(conn).get_columns("production_run_items")}
+        if "gcode_file_id" in item_cols:
+            conn.execute(text("ALTER TABLE production_run_items ALTER COLUMN gcode_file_id DROP NOT NULL"))
     _add_enum_value(conn, "userrole", "packing")
     _add_enum_value(conn, "userrole", "inventory")

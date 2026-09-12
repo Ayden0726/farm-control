@@ -2,14 +2,25 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import GCodeFile, GCodePrinterCompat, Part, StlFile, User
+from app.models import (
+    GCodeFile,
+    GCodePrinterCompat,
+    Part,
+    PartCostSnapshot,
+    PrintJob,
+    ProductionPlanLine,
+    ProductionRunItem,
+    StlFile,
+    User,
+)
 from app.schemas import GCodeOut, GCodeUpdate, PartIn, PartOut, StlOut
 from app.serialize import gcode_out
 from app.services.farm_settings import get_automation
@@ -188,6 +199,59 @@ async def update_gcode(
         )
     ).scalar_one()
     return gcode_out(gcode)
+
+
+@gcode_router.delete("/{gcode_id}")
+async def delete_gcode(
+    gcode_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    gcode = await db.get(GCodeFile, gcode_id)
+    if not gcode:
+        raise HTTPException(404, "G-code not found")
+    job_count = (
+        await db.execute(select(func.count()).select_from(PrintJob).where(PrintJob.gcode_file_id == gcode.id))
+    ).scalar_one()
+    if job_count:
+        raise HTTPException(
+            400,
+            f"Cannot delete {gcode.filename}: {int(job_count)} print job(s) still reference it. "
+            "Archive it instead so queue history keeps the file it used.",
+        )
+    await db.execute(
+        update(ProductionRunItem).where(ProductionRunItem.gcode_file_id == gcode.id).values(gcode_file_id=None)
+    )
+    await db.execute(
+        update(ProductionPlanLine).where(ProductionPlanLine.gcode_file_id == gcode.id).values(gcode_file_id=None)
+    )
+    await db.execute(
+        update(PartCostSnapshot).where(PartCostSnapshot.gcode_file_id == gcode.id).values(gcode_file_id=None)
+    )
+    stored = gcode.stored_path
+    filename = gcode.filename
+    shared = (
+        await db.execute(
+            select(func.count())
+            .select_from(GCodeFile)
+            .where(GCodeFile.stored_path == stored, GCodeFile.id != gcode.id)
+        )
+    ).scalar_one()
+    try:
+        await db.delete(gcode)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            400,
+            f"Cannot delete {filename}: it is still referenced by farm records. Archive it instead.",
+        ) from exc
+    if not shared and stored:
+        path = Path(stored)
+        if path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+    return {"ok": True, "deleted": True, "filename": filename}
 
 
 def _apply_stl_bounds(stl: StlFile, content: bytes | None = None) -> None:

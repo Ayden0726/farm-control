@@ -4,6 +4,7 @@ import { FormEvent, Fragment, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { FarmSettings, GCode, Part, Stl } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,6 +43,8 @@ export default function LibraryPage() {
   const [pack, setPack] = useState({ x: 220, y: 220, gap: 8 });
   const [printers, setPrinters] = useState<{ id: string; name: string }[]>([]);
   const [edit, setEdit] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<GCode | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     const [gcode, models, partRows, settings, printerRows] = await Promise.all([
@@ -108,8 +111,28 @@ export default function LibraryPage() {
   }
 
   async function archive(id: string, archived: boolean) {
-    await api(`/api/v1/gcode/${id}`, { method: "PATCH", body: JSON.stringify({ is_archived: archived }) });
-    load();
+    try {
+      await api(`/api/v1/gcode/${id}`, { method: "PATCH", body: JSON.stringify({ is_archived: archived }) });
+      toast.success(archived ? "Archived. Historical jobs keep this file; it will not be queued." : "Restored to the library.");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update G-code");
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await api(`/api/v1/gcode/${pendingDelete.id}`, { method: "DELETE" });
+      toast.success(`Deleted ${pendingDelete.filename}`);
+      setPendingDelete(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete G-code");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function saveGcode(g: GCode, patch: Partial<GCode>) {
@@ -216,7 +239,7 @@ export default function LibraryPage() {
           <TableBody>
             {files.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-zinc-500">
+                <TableCell colSpan={9} className="text-zinc-500">
                   No G-code yet. Slice a plate in OrcaSlicer or PrusaSlicer and upload it here to queue production.
                 </TableCell>
               </TableRow>
@@ -249,6 +272,9 @@ export default function LibraryPage() {
                   <div className="flex flex-wrap gap-1">
                     <Button size="xs" variant="outline" onClick={() => archive(g.id, !g.is_archived)}>
                       {g.is_archived ? "Unarchive" : "Archive"}
+                    </Button>
+                    <Button size="xs" variant="destructive" onClick={() => setPendingDelete(g)}>
+                      Delete
                     </Button>
                     <Button size="xs" variant="outline" onClick={() => setEdit(edit === g.id ? null : g.id)}>
                       Compatibility
@@ -373,6 +399,26 @@ export default function LibraryPage() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={!!pendingDelete} onOpenChange={(next) => !next && setPendingDelete(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {pendingDelete?.filename}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This removes the G-code from the library. Archive keeps it for job history. If any print job already used
+            this file, FarmOS will refuse the delete — archive it instead.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPendingDelete(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete G-code"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
