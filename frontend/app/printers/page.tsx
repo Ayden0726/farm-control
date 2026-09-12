@@ -26,7 +26,8 @@ export default function PrintersPage() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [howToFix, setHowToFix] = useState<string[]>([]);
+  const [pending, setPending] = useState<{ type: "retire" | "delete"; printer: Printer } | null>(null);
+  const [acting, setActing] = useState(false);
   const [form, setForm] = useState({
     name: "",
     model: "",
@@ -75,6 +76,39 @@ export default function PrintersPage() {
       toast.error(message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  const active = printers.filter((p) => p.is_enabled);
+  const retired = printers.filter((p) => !p.is_enabled);
+
+  async function confirmAction() {
+    if (!pending) return;
+    setActing(true);
+    try {
+      if (pending.type === "retire") {
+        await api(`/api/v1/printers/${pending.printer.id}/retire`, { method: "POST" });
+        toast.success(`${pending.printer.name} retired. It will not take new jobs.`);
+      } else {
+        await api(`/api/v1/printers/${pending.printer.id}`, { method: "DELETE" });
+        toast.success(`${pending.printer.name} deleted.`);
+      }
+      setPending(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update printer");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function restore(printer: Printer) {
+    try {
+      await api(`/api/v1/printers/${printer.id}/restore`, { method: "POST" });
+      toast.success(`${printer.name} is back on the farm.`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not restore printer");
     }
   }
 
@@ -172,50 +206,123 @@ export default function PrintersPage() {
           </DialogContent>
         </Dialog>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Printer</TableHead>
-            <TableHead>Connection</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Temps</TableHead>
-            <TableHead>Current file</TableHead>
-            <TableHead>Progress</TableHead>
-            <TableHead>Remaining</TableHead>
-            <TableHead>Hours</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {printers.map((p) => (
-            <TableRow key={p.id}>
-              <TableCell>
-                <Link href={`/printers/${p.id}`} className="font-medium hover:text-amber-200">
-                  {p.name}
-                </Link>
-                <div className="text-xs text-zinc-500">{p.model}</div>
-              </TableCell>
-              <TableCell className="capitalize">{p.adapter_type}</TableCell>
-              <TableCell>
-                <StatusPill status={p.status} />
-              </TableCell>
-              <TableCell className="font-mono text-xs">
-                {p.nozzle_temp.toFixed(0)}° / {p.bed_temp.toFixed(0)}°
-              </TableCell>
-              <TableCell className="max-w-[180px] truncate text-xs">{p.current_file || "—"}</TableCell>
-              <TableCell className="font-mono">{p.progress_percent.toFixed(0)}%</TableCell>
-              <TableCell className="font-mono text-xs">{formatDuration(p.time_remaining_seconds)}</TableCell>
-              <TableCell className="font-mono text-xs">{formatHours(p.total_print_seconds)}</TableCell>
-              <TableCell>
-                <QrDialog kind="printer" token={p.qr_token} label={p.name} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {printers.length === 0 && (
-        <p className="text-sm text-zinc-500">No printers yet. Add one and FarmOS will check the connection first.</p>
+      <PrinterTable
+        printers={active}
+        onRetire={(p) => setPending({ type: "retire", printer: p })}
+        onDelete={(p) => setPending({ type: "delete", printer: p })}
+      />
+      {active.length === 0 && (
+        <p className="text-sm text-zinc-500">No active printers. Add one and FarmOS will check the connection first.</p>
       )}
+      {retired.length > 0 && (
+        <div className="space-y-2 pt-4">
+          <h2 className="text-sm font-medium text-zinc-400">Retired</h2>
+          <p className="text-xs text-zinc-500">
+            Retired printers keep job history but do not take new work. Restore them to put them back on the farm.
+          </p>
+          <PrinterTable
+            printers={retired}
+            onRestore={restore}
+            onDelete={(p) => setPending({ type: "delete", printer: p })}
+          />
+        </div>
+      )}
+      <Dialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pending?.type === "delete" ? `Delete ${pending.printer.name}?` : `Retire ${pending?.printer.name}?`}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {pending?.type === "delete"
+              ? "This removes the printer from the farm. Print history stays. You cannot undo this — add the machine again if it comes back."
+              : "It will not be assigned new jobs. Restore it later from the Retired list if the machine returns."}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPending(null)} disabled={acting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmAction} disabled={acting}>
+              {acting ? "Working…" : pending?.type === "delete" ? "Delete printer" : "Retire printer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function PrinterTable({
+  printers,
+  onRetire,
+  onRestore,
+  onDelete,
+}: {
+  printers: Printer[];
+  onRetire?: (p: Printer) => void;
+  onRestore?: (p: Printer) => void;
+  onDelete?: (p: Printer) => void;
+}) {
+  if (printers.length === 0) return null;
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Printer</TableHead>
+          <TableHead>Connection</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Temps</TableHead>
+          <TableHead>Current file</TableHead>
+          <TableHead>Progress</TableHead>
+          <TableHead>Remaining</TableHead>
+          <TableHead>Hours</TableHead>
+          <TableHead></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {printers.map((p) => (
+          <TableRow key={p.id} className={p.is_enabled ? "" : "opacity-70"}>
+            <TableCell>
+              <Link href={`/printers/${p.id}`} className="font-medium hover:text-amber-200">
+                {p.name}
+              </Link>
+              <div className="text-xs text-zinc-500">{p.model}</div>
+            </TableCell>
+            <TableCell className="capitalize">{p.adapter_type}</TableCell>
+            <TableCell>
+              <StatusPill status={p.is_enabled ? p.status : "retired"} />
+            </TableCell>
+            <TableCell className="font-mono text-xs">
+              {p.nozzle_temp.toFixed(0)}° / {p.bed_temp.toFixed(0)}°
+            </TableCell>
+            <TableCell className="max-w-[180px] truncate text-xs">{p.current_file || "—"}</TableCell>
+            <TableCell className="font-mono">{p.progress_percent.toFixed(0)}%</TableCell>
+            <TableCell className="font-mono text-xs">{formatDuration(p.time_remaining_seconds)}</TableCell>
+            <TableCell className="font-mono text-xs">{formatHours(p.total_print_seconds)}</TableCell>
+            <TableCell>
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                <QrDialog kind="printer" token={p.qr_token} label={p.name} />
+                {onRestore && (
+                  <Button size="xs" variant="outline" onClick={() => onRestore(p)}>
+                    Restore
+                  </Button>
+                )}
+                {onRetire && p.is_enabled && (
+                  <Button size="xs" variant="outline" onClick={() => onRetire(p)}>
+                    Retire
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button size="xs" variant="destructive" onClick={() => onDelete(p)}>
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

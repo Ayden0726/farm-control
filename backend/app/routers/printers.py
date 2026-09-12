@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,9 +10,17 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import (
     FilamentSpool,
+    FilamentTransaction,
+    GCodePrinterCompat,
+    JobStatus,
+    MaintenanceLog,
+    PrintJob,
     Printer,
     PrinterAdapterType,
+    PrinterNotificationPreference,
     PrinterStatus,
+    ProductionRunPrinter,
+    StorageLocation,
     User,
     utcnow,
 )
@@ -36,6 +44,63 @@ async def _load_printer(db: AsyncSession, printer_id: UUID) -> Printer:
     if not printer:
         raise HTTPException(404, "Printer not found")
     return printer
+
+
+async def _busy_message(db: AsyncSession, printer: Printer) -> str | None:
+    if printer.status in {PrinterStatus.printing, PrinterStatus.paused}:
+        return "This printer is still printing. Wait for it to finish, or cancel the job, then try again."
+    active = (
+        await db.execute(
+            select(PrintJob.id).where(
+                or_(PrintJob.assigned_printer_id == printer.id, PrintJob.actual_printer_id == printer.id),
+                PrintJob.status.in_([JobStatus.printing, JobStatus.paused]),
+            )
+        )
+    ).first()
+    if active:
+        return "This printer has an active job. Finish or cancel that job first."
+    return None
+
+
+async def _release_queued_jobs(db: AsyncSession, printer: Printer) -> int:
+    result = await db.execute(
+        update(PrintJob)
+        .where(
+            PrintJob.assigned_printer_id == printer.id,
+            PrintJob.status.in_([JobStatus.queued, JobStatus.held]),
+        )
+        .values(assigned_printer_id=None)
+    )
+    return result.rowcount or 0
+
+
+async def _unassign_spool(db: AsyncSession, printer: Printer) -> None:
+    if printer.assigned_spool_id:
+        spool = await db.get(FilamentSpool, printer.assigned_spool_id)
+        if spool:
+            spool.assigned_printer_id = None
+        printer.assigned_spool_id = None
+
+
+async def _retire_printer(db: AsyncSession, printer: Printer) -> None:
+    busy = await _busy_message(db, printer)
+    if busy:
+        raise HTTPException(400, busy)
+    printer.is_enabled = False
+    printer.current_job_id = None
+    extra = dict(printer.extra_config or {})
+    extra.setdefault("sim", {})["status"] = "idle"
+    printer.extra_config = extra
+    if printer.status not in {PrinterStatus.waiting_for_bed_clear, PrinterStatus.error}:
+        printer.status = PrinterStatus.offline
+    await _release_queued_jobs(db, printer)
+    await _unassign_spool(db, printer)
+
+
+async def _restore_printer(db: AsyncSession, printer: Printer) -> None:
+    printer.is_enabled = True
+    if printer.status == PrinterStatus.offline:
+        printer.last_error = None
 
 
 @router.get("/adapters")
@@ -145,6 +210,7 @@ async def update_printer(
     data = payload.model_dump(exclude_unset=True)
     api_key = data.pop("api_key", None)
     adapter_type = data.pop("adapter_type", None)
+    enabled = data.pop("is_enabled", None)
     if "base_url" in data and data["base_url"]:
         data["base_url"] = normalize_base_url(data["base_url"])
     connection_changed = any(k in data for k in ("base_url", "extra_config")) or api_key is not None or adapter_type is not None
@@ -154,6 +220,10 @@ async def update_printer(
         printer.adapter_type = PrinterAdapterType(adapter_type)
     if api_key:
         printer.api_key_encrypted = encrypt_secret(api_key)
+    if enabled is False:
+        await _retire_printer(db, printer)
+    elif enabled is True:
+        await _restore_printer(db, printer)
     if connection_changed and printer.adapter_type.value != "simulated":
         key_to_try = api_key if api_key else decrypt_secret(printer.api_key_encrypted)
         result = await probe_adapter(
@@ -176,14 +246,70 @@ async def update_printer(
     return printer_out(await _load_printer(db, printer.id))
 
 
+@router.post("/{printer_id}/retire", response_model=PrinterOut)
+async def retire_printer(
+    printer_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    printer = await _load_printer(db, printer_id)
+    if not printer.is_enabled:
+        return printer_out(printer)
+    await _retire_printer(db, printer)
+    await db.commit()
+    return printer_out(await _load_printer(db, printer.id))
+
+
+@router.post("/{printer_id}/restore", response_model=PrinterOut)
+async def restore_printer(
+    printer_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    printer = await _load_printer(db, printer_id)
+    await _restore_printer(db, printer)
+    await db.commit()
+    return printer_out(await _load_printer(db, printer.id))
+
+
 @router.delete("/{printer_id}")
 async def delete_printer(
     printer_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
 ):
     printer = await _load_printer(db, printer_id)
+    busy = await _busy_message(db, printer)
+    if busy:
+        raise HTTPException(400, busy)
+    await _unassign_spool(db, printer)
+    await _release_queued_jobs(db, printer)
+    jobs = (
+        await db.execute(
+            select(PrintJob).where(
+                or_(PrintJob.assigned_printer_id == printer.id, PrintJob.actual_printer_id == printer.id)
+            )
+        )
+    ).scalars().all()
+    for job in jobs:
+        if job.assigned_printer_id == printer.id:
+            job.assigned_printer_id = None
+        if job.actual_printer_id == printer.id:
+            job.actual_printer_id = None
+    await db.execute(
+        update(FilamentSpool).where(FilamentSpool.assigned_printer_id == printer.id).values(assigned_printer_id=None)
+    )
+    await db.execute(
+        update(FilamentTransaction).where(FilamentTransaction.printer_id == printer.id).values(printer_id=None)
+    )
+    await db.execute(
+        update(StorageLocation).where(StorageLocation.printer_id == printer.id).values(printer_id=None)
+    )
+    await db.execute(delete(ProductionRunPrinter).where(ProductionRunPrinter.printer_id == printer.id))
+    await db.execute(delete(GCodePrinterCompat).where(GCodePrinterCompat.printer_id == printer.id))
+    await db.execute(delete(MaintenanceLog).where(MaintenanceLog.printer_id == printer.id))
+    await db.execute(
+        delete(PrinterNotificationPreference).where(PrinterNotificationPreference.printer_id == printer.id)
+    )
+    printer.current_job_id = None
+    await db.flush()
     await db.delete(printer)
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "deleted": True, "name": printer.name}
 
 
 @router.post("/{printer_id}/bed-cleared", response_model=PrinterOut)

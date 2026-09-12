@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
 import type { Printer, Spool } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
@@ -12,10 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDuration, formatHours } from "@/lib/format";
 import { QrDialog } from "@/components/qr-dialog";
-import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function PrinterDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [printer, setPrinter] = useState<Printer | null>(null);
   const [spools, setSpools] = useState<Spool[]>([]);
   const [notes, setNotes] = useState("");
@@ -25,6 +26,8 @@ export default function PrinterDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [howToFix, setHowToFix] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<"retire" | "delete" | null>(null);
+  const [acting, setActing] = useState(false);
 
   async function load() {
     const p = await api<Printer>(`/api/v1/printers/${params.id}`);
@@ -82,7 +85,7 @@ export default function PrinterDetailPage() {
               {printer.model} · {printer.adapter_type}
             </div>
           </div>
-          <StatusPill status={printer.status} />
+          <StatusPill status={printer.is_enabled ? printer.status : "retired"} />
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -124,6 +127,11 @@ export default function PrinterDetailPage() {
             <QrDialog kind="printer" token={printer.qr_token} label={printer.name} />
           </div>
           {printer.last_error && <p className="text-sm text-red-300">{printer.last_error}</p>}
+          {!printer.is_enabled && (
+            <p className="text-sm text-amber-200">
+              This printer is retired. It will not take new jobs until you restore it.
+            </p>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -155,6 +163,42 @@ export default function PrinterDetailPage() {
           >
             Log maintenance now
           </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Remove from farm</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            Retire keeps the printer and its history but stops new jobs. Delete removes it from the farm; job
+            history stays.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {printer.is_enabled ? (
+              <Button variant="outline" onClick={() => setPending("retire")}>
+                Retire printer
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await api(`/api/v1/printers/${printer.id}/restore`, { method: "POST" });
+                    toast.success("Printer restored to the farm.");
+                    load();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not restore");
+                  }
+                }}
+              >
+                Restore printer
+              </Button>
+            )}
+            <Button variant="destructive" onClick={() => setPending("delete")}>
+              Delete printer
+            </Button>
+          </div>
         </CardContent>
       </Card>
       <Card className="lg:col-span-3">
@@ -210,6 +254,51 @@ export default function PrinterDetailPage() {
           </div>
         </CardContent>
       </Card>
+      <Dialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pending === "delete" ? `Delete ${printer.name}?` : `Retire ${printer.name}?`}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {pending === "delete"
+              ? "This removes the printer from the farm. Print history stays. Add the machine again if it comes back."
+              : "It will not be assigned new jobs. Restore it later if the machine returns."}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPending(null)} disabled={acting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={acting}
+              onClick={async () => {
+                if (!pending) return;
+                setActing(true);
+                try {
+                  if (pending === "retire") {
+                    await api(`/api/v1/printers/${printer.id}/retire`, { method: "POST" });
+                    toast.success("Printer retired.");
+                    setPending(null);
+                    load();
+                  } else {
+                    await api(`/api/v1/printers/${printer.id}`, { method: "DELETE" });
+                    toast.success("Printer deleted.");
+                    router.push("/printers");
+                  }
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not update printer");
+                } finally {
+                  setActing(false);
+                }
+              }}
+            >
+              {acting ? "Working…" : pending === "delete" ? "Delete printer" : "Retire printer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -8,6 +8,7 @@ const STYLES: Record<string, string> = {
   error: "bg-red-500/15 text-red-300 ring-1 ring-red-500/40",
   paused: "bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30",
   waiting_for_bed_clear: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/40",
+  retired: "bg-zinc-800 text-zinc-400 ring-1 ring-zinc-600/50",
   queued: "bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/30",
   held: "bg-orange-500/15 text-orange-300 ring-1 ring-orange-500/30",
   completed: "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/20",
@@ -40,6 +41,7 @@ export function StatusPill({ status, className }: { status: string; className?: 
       {status === "waiting_for_bed_clear" && (
         <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />
       )}
+      {status === "retired" && <span className="size-1.5 rounded-full bg-zinc-500" />}
       {prettyStatus(status)}
     </span>
   );

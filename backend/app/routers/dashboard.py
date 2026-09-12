@@ -31,7 +31,12 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("")
 async def dashboard(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     printers = (
-        await db.execute(select(Printer).options(selectinload(Printer.assigned_spool)).order_by(Printer.name))
+        await db.execute(
+            select(Printer)
+            .options(selectinload(Printer.assigned_spool))
+            .where(Printer.is_enabled.is_(True))
+            .order_by(Printer.name)
+        )
     ).scalars().all()
     jobs = (
         await db.execute(
