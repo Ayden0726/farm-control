@@ -68,8 +68,11 @@ async def _scheduler_loop() -> None:
 async def lifespan(app: FastAPI):
     configure_logging()
     settings = get_settings()
-    async with engine.begin() as conn:
-        await conn.run_sync(upgrade_schema)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(upgrade_schema)
+    except Exception:
+        logger.exception("schema upgrade failed — API will still listen for setup")
     async with SessionLocal() as db:
         try:
             from app.seed_filament import ensure_filament_system

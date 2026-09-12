@@ -71,7 +71,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       detail = parsed.detail;
       howToFix = parsed.howToFix;
     } catch {
-      /* ignore */
+      if (res.status >= 500) {
+        detail =
+          "The farm API did not respond. Wait 15 seconds and try again, or run: docker compose logs backend";
+      }
     }
     throw new ApiError(res.status, detail, howToFix);
   }

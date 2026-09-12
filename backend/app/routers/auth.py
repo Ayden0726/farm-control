@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal, get_db
@@ -45,21 +46,34 @@ async def setup_status() -> SetupStatus:
 
 @router.post("/setup", response_model=TokenOut)
 async def setup(payload: SetupIn, db: AsyncSession = Depends(get_db)) -> TokenOut:
-    count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
-    if count:
-        raise HTTPException(400, "Setup already completed")
-    user = User(
-        email=payload.email.lower().strip(),
-        hashed_password=hash_password(payload.password),
-        full_name=payload.full_name.strip() or "Farm Admin",
-        role=UserRole.admin,
-    )
-    db.add(user)
-    await _upsert_setting(db, "company_name", payload.company_name.strip() or "Print Farm")
-    await _upsert_setting(db, "setup_completed", True)
-    await db.flush()
-    await db.commit()
-    await db.refresh(user)
+    try:
+        count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
+        if count:
+            raise HTTPException(400, "Setup already completed — sign in instead.")
+        user = User(
+            email=payload.email.lower().strip(),
+            hashed_password=hash_password(payload.password),
+            full_name=payload.full_name.strip() or "Farm Admin",
+            role=UserRole.admin,
+        )
+        db.add(user)
+        await _upsert_setting(db, "company_name", payload.company_name.strip() or "Print Farm")
+        await _upsert_setting(db, "setup_completed", True)
+        await db.flush()
+        await db.commit()
+        await db.refresh(user)
+    except HTTPException:
+        raise
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(400, "Setup already completed — sign in instead.")
+    except Exception:
+        logger.exception("setup failed")
+        await db.rollback()
+        raise HTTPException(
+            500,
+            "Could not create the admin account. In WSL run: docker compose logs backend",
+        )
     if payload.load_demo:
         try:
             await seed_demo(db)
@@ -67,10 +81,9 @@ async def setup(payload: SetupIn, db: AsyncSession = Depends(get_db)) -> TokenOu
         except Exception:
             logger.exception("demo seed failed; admin account was still created")
             await db.rollback()
-    token = create_access_token(user.id, user.role.value)
-    return TokenOut(
-        access_token=token, role=user.role.value, email=user.email, full_name=user.full_name
-    )
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    token = create_access_token(user.id, role)
+    return TokenOut(access_token=token, role=role, email=user.email, full_name=user.full_name)
 
 
 @router.post("/auth/login", response_model=TokenOut)

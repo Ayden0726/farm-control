@@ -23,5 +23,7 @@ ENV API_INTERNAL_URL=$API_INTERNAL_URL
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY docker-start.sh ./docker-start.sh
+RUN chmod +x docker-start.sh
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["./docker-start.sh"]
