@@ -54,3 +54,8 @@ echo
 echo "Update complete. Open the FarmOS URL in your browser."
 echo "If the UI looks old, do a hard refresh (Ctrl+Shift+R)."
 echo "Backup anytime with: ./scripts/backup.sh"
+
+if [[ -z "${UPDATE_FROM_AGENT:-}" ]]; then
+  chmod +x scripts/update-agent.sh scripts/ensure-update-agent.sh 2>/dev/null || true
+  ./scripts/ensure-update-agent.sh || true
+fi

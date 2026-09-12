@@ -98,6 +98,7 @@ RUN_SCHEDULER=false
 }
 
 Write-Host "==> Starting Print FarmOS (first run builds images and can take several minutes)"
+New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot "data\update") | Out-Null
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) {
   Write-Error "docker compose failed"
@@ -112,5 +113,21 @@ Write-Host "First visit opens the setup wizard. Create an admin account."
 Write-Host "Uncheck Load demo data if this is a live shop."
 Write-Host ""
 Write-Host "Stop:    docker compose down"
-Write-Host "Update:  git pull; .\update.ps1"
+Write-Host "Update:  Settings → Update Print FarmOS, or .\update.ps1"
 Write-Host "Backup:  bash ./scripts/backup.sh"
+
+$agentDir = Join-Path $PSScriptRoot "data\update"
+New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
+$pidFile = Join-Path $agentDir "agent.pid"
+$running = $false
+if (Test-Path $pidFile) {
+  $oldId = Get-Content $pidFile | Select-Object -First 1
+  if ($oldId -and (Get-Process -Id $oldId -ErrorAction SilentlyContinue)) { $running = $true }
+}
+if (-not $running) {
+  $proc = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    "-NoProfile", "-WindowStyle", "Hidden", "-File", (Join-Path $PSScriptRoot "scripts\update-agent.ps1")
+  ) -PassThru
+  $proc.Id | Set-Content $pidFile
+  Write-Host "Update agent started. Settings → Update Print FarmOS is now available."
+}

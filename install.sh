@@ -217,6 +217,8 @@ else
 fi
 
 say "Starting Print FarmOS (first run builds images and can take several minutes)"
+mkdir -p data/update
+chmod 777 data/update 2>/dev/null || true
 if [[ -d .git ]]; then
   APP_VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
   export APP_VERSION
@@ -250,6 +252,10 @@ echo "First visit opens the setup wizard. Create an admin account."
 echo "Uncheck Load demo data if this is a live shop."
 echo
 echo "Stop:    docker compose down"
-echo "Update:  ./update.sh"
+echo "Update:  Settings → Update Print FarmOS, or ./update.sh"
 echo "Backup:  ./scripts/backup.sh"
 echo
+
+say "Enabling one-click updates from Settings"
+chmod +x scripts/update-agent.sh scripts/ensure-update-agent.sh update.sh
+./scripts/ensure-update-agent.sh || true

@@ -34,3 +34,20 @@ if ($LASTEXITCODE -ne 0) { Write-Error "docker compose failed" }
 Write-Host ""
 Write-Host "Update complete. Open the FarmOS URL in your browser."
 Write-Host "If the UI looks old, hard-refresh (Ctrl+Shift+R)."
+
+if (-not $env:UPDATE_FROM_AGENT) {
+  $agentDir = Join-Path $PSScriptRoot "data\update"
+  New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
+  $pidFile = Join-Path $agentDir "agent.pid"
+  $running = $false
+  if (Test-Path $pidFile) {
+    $oldId = Get-Content $pidFile | Select-Object -First 1
+    if ($oldId -and (Get-Process -Id $oldId -ErrorAction SilentlyContinue)) { $running = $true }
+  }
+  if (-not $running) {
+    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+      "-NoProfile", "-WindowStyle", "Hidden", "-File", (Join-Path $PSScriptRoot "scripts\update-agent.ps1")
+    ) -PassThru
+    $proc.Id | Set-Content $pidFile
+  }
+}

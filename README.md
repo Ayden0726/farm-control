@@ -44,7 +44,9 @@ If phones or other PCs will use a specific address:
 
 ## Update
 
-On the server, in the install folder:
+In the app: **Settings → Update Print FarmOS**.
+
+The first time (or after a reboot if the updater is not installed as a service), run this once on the server so the button can work:
 
 ```bash
 ./update.sh
@@ -52,7 +54,7 @@ On the server, in the install folder:
 
 Windows with Docker Desktop: `.\update.ps1`
 
-That pulls the latest code and rebuilds containers. Postgres data and uploaded G-code are kept. You can also open **Settings → Application update** in the UI for the same commands.
+That pulls the latest code and rebuilds containers. Postgres data and uploaded G-code are kept.
 
 The API is on port 8000 (`/docs` for OpenAPI).
 

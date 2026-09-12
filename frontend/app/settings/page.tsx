@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,14 @@ type Settings = {
   update_command: string;
 };
 
+type UpdateStatus = {
+  available: boolean;
+  status: string;
+  message: string;
+  app_version: string;
+  log_tail?: string;
+};
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [company, setCompany] = useState("");
@@ -26,6 +34,8 @@ export default function SettingsPage() {
   const [wooKey, setWooKey] = useState("");
   const [wooSecret, setWooSecret] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     api<Settings>("/api/v1/settings")
@@ -35,6 +45,27 @@ export default function SettingsPage() {
         setWooUrl(s.woocommerce_url);
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load settings"));
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    async function refresh() {
+      try {
+        const row = await api<UpdateStatus>("/api/v1/system/update");
+        if (!cancel) {
+          setUpdate(row);
+          if (row.status !== "updating") setUpdating(false);
+        }
+      } catch {
+        /* viewer role or server restarting */
+      }
+    }
+    refresh();
+    const id = setInterval(refresh, 2500);
+    return () => {
+      cancel = true;
+      clearInterval(id);
+    };
   }, []);
 
   async function save(e: FormEvent) {
@@ -58,10 +89,31 @@ export default function SettingsPage() {
     }
   }
 
+  async function runUpdate() {
+    setUpdating(true);
+    try {
+      const res = await api<UpdateStatus>("/api/v1/system/update", {
+        method: "POST",
+        signal: AbortSignal.timeout(15000),
+      });
+      setUpdate(res);
+      toast.success(res.message || "Update started. The site may restart for a few minutes.");
+    } catch (err) {
+      setUpdating(false);
+      const message = err instanceof Error ? err.message : "Could not start update";
+      toast.error(message);
+      if (err instanceof ApiError && err.howToFix.length) {
+        toast.message(err.howToFix[0]);
+      }
+    }
+  }
+
   if (loadError) {
     return <div className="text-red-300">{loadError}</div>;
   }
   if (!settings) return <div className="text-zinc-500">Loading settings…</div>;
+
+  const busy = updating || update?.status === "updating";
 
   return (
     <div className="space-y-8">
@@ -107,21 +159,30 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>
-            Running version <span className="font-mono">{settings.app_version || "dev"}</span>.
+            Running version{" "}
+            <span className="font-mono">{update?.app_version || settings.app_version || "dev"}</span>
+            {update?.status && update.status !== "unavailable" ? (
+              <span className="text-zinc-500"> · {update.status}</span>
+            ) : null}
           </p>
           <p className="text-muted-foreground">
-            Updates are applied on the server (this page cannot rebuild Docker from the browser). SSH into
-            the machine that runs Print FarmOS, open the install folder, and run:
+            {update?.message ||
+              "Pull the latest Print FarmOS from GitHub and rebuild. The database and G-code uploads are kept."}
           </p>
-          <pre className="overflow-x-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs">
-            {`git pull
-./update.sh`}
-          </pre>
-          <p className="text-xs text-zinc-500">
-            On Windows with Docker Desktop use <span className="font-mono">.\update.ps1</span> after{" "}
-            <span className="font-mono">git pull</span>. First run rebuilds images and can take several
-            minutes. Your database and G-code uploads are kept.
-          </p>
+          <Button onClick={runUpdate} disabled={busy || update?.available === false}>
+            {busy ? "Updating… this can take several minutes" : "Update Print FarmOS"}
+          </Button>
+          {update?.available === false && (
+            <p className="text-xs text-amber-200">
+              One-click update starts after you run <span className="font-mono">./update.sh</span> on the
+              server once (Windows: <span className="font-mono">.\update.ps1</span>). Then this button works.
+            </p>
+          )}
+          {update?.log_tail && (busy || update.status === "error") && (
+            <pre className="max-h-48 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-zinc-400">
+              {update.log_tail}
+            </pre>
+          )}
         </CardContent>
       </Card>
     </div>

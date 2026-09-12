@@ -26,6 +26,7 @@ from app.routers.production import router as production_router
 from app.routers.products import router as products_router
 from app.routers.purchasing import router as purchasing_router
 from app.routers.queue import router as queue_router
+from app.routers.system import router as system_router
 from app.routers.misc import analytics_router, maint_router, qr_router, scan_router, settings_router
 from app.util import configure_logging
 
@@ -133,6 +134,7 @@ def create_app() -> FastAPI:
     application.include_router(maint_router, prefix=api)
     application.include_router(analytics_router, prefix=api)
     application.include_router(settings_router, prefix=api)
+    application.include_router(system_router, prefix=api)
     application.include_router(qr_router, prefix=api)
     application.include_router(scan_router, prefix=api)
 

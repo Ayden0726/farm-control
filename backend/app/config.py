@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     woocommerce_secret: str = ""
     public_app_url: str = "http://127.0.0.1:43123"
     app_version: str = "dev"
+    update_control_dir: Path = Path("/update-control")
     notify_webhook_url: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
