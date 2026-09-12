@@ -28,11 +28,13 @@ _DENSITY_G_CM3 = {
 }
 
 # Longer unit names must come first so "hours" is not parsed as "h" + leftover text.
+# Allow compact tokens like 2h15m (no word boundary between h and 15).
+_DURATION_UNITS = r"days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s"
 _DURATION_PART = re.compile(
-    r"(\d+)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b",
+    rf"(\d+(?:\.\d+)?)\s*({_DURATION_UNITS})(?![A-Za-z])",
     re.IGNORECASE,
 )
-_CLOCK = re.compile(r"\b(\d+):(\d{2}):(\d{2})\b")
+_CLOCK = re.compile(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b")
 _NUMS = re.compile(r"[\d.]+")
 _UNIT_SECONDS = {
     "d": 86400,
@@ -54,6 +56,16 @@ _UNIT_SECONDS = {
     "second": 1,
     "seconds": 1,
 }
+_MAX_DURATION_SECONDS = 7 * 86400
+_FILENAME_BOUND = r"[\s._\-()]"
+_FILENAME_TIME_TOKEN = re.compile(
+    rf"(?:^|{_FILENAME_BOUND})("
+    rf"(?:\d+(?:\.\d+)?\s*(?:{_DURATION_UNITS})(?:[\s._-]*\d+(?:\.\d+)?\s*(?:{_DURATION_UNITS}))*)"
+    rf"|(?:\d+\s*(?:hours?|hrs?|h)[\s._-]*\d{{2}}(?!\s*(?:{_DURATION_UNITS})))"
+    rf"|(?:\d{{1,2}}:\d{{2}}(?::\d{{2}})?)"
+    rf")(?=$|{_FILENAME_BOUND})",
+    re.IGNORECASE,
+)
 
 
 def read_gcode_scan_bytes(path: Path, end_bytes: int = _END_BYTES) -> bytes:
@@ -129,6 +141,34 @@ def parse_gcode_file_bytes(raw: bytes) -> dict[str, float | int | str]:
 
 def parse_gcode_file(path: Path) -> dict[str, float | int | str]:
     return parse_gcode_comments(gcode_text_for_metadata(read_gcode_scan_bytes(path)))
+
+
+def parse_time_from_filename(filename: str) -> int | None:
+    """Print duration encoded in a G-code file name, if any.
+
+    Same units as slicer comment parsing (h/hr/hours, m/min/minutes, s/sec/seconds).
+    Bounded like quantity markers: start/end, spaces, dots, underscores, dashes, parentheses.
+    """
+    stem = Path(filename or "").stem
+    if not stem:
+        return None
+    found: list[int] = []
+    for match in _FILENAME_TIME_TOKEN.finditer(stem):
+        seconds = _parse_duration(match.group(1))
+        if seconds:
+            found.append(seconds)
+    return found[-1] if found else None
+
+
+def apply_filename_time_fallback(meta: dict[str, float | int | str], filename: str) -> bool:
+    """Use a filename duration when slicer comments did not produce a real estimate."""
+    if meta.get("estimated_time_seconds"):
+        return False
+    seconds = parse_time_from_filename(filename)
+    if not seconds:
+        return False
+    meta["estimated_time_seconds"] = seconds
+    return True
 
 
 def apply_gcode_estimates(gcode: Any, meta: dict[str, float | int | str], *, fill_profile: bool = True) -> bool:
@@ -253,15 +293,35 @@ def _parse_duration(raw: str) -> int | None:
         return None
     clock = _CLOCK.search(text)
     if clock:
-        h, m, s = (int(clock.group(1)), int(clock.group(2)), int(clock.group(3)))
-        return h * 3600 + m * 60 + s
-    total = 0
+        h = int(clock.group(1))
+        m = int(clock.group(2))
+        s = int(clock.group(3) or 0)
+        if m < 60 and s < 60:
+            return _bounded_seconds(h * 3600 + m * 60 + s)
+    implied = re.fullmatch(
+        rf"(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)[\s._-]*(\d{{2}})",
+        text,
+        re.IGNORECASE,
+    )
+    if implied:
+        minutes = int(implied.group(2))
+        if minutes < 60:
+            return _bounded_seconds(int(round(float(implied.group(1)) * 3600 + minutes * 60)))
+    total = 0.0
     found = False
     for match in _DURATION_PART.finditer(text):
         unit = match.group(2).lower()
-        total += int(match.group(1)) * _UNIT_SECONDS[unit]
+        total += float(match.group(1)) * _UNIT_SECONDS[unit]
         found = True
-    return total if found and total > 0 else None
+    if not found or total <= 0:
+        return None
+    return _bounded_seconds(int(round(total)))
+
+
+def _bounded_seconds(seconds: int) -> int | None:
+    if seconds < 1 or seconds > _MAX_DURATION_SECONDS:
+        return None
+    return seconds
 
 
 def _sum_after(content: str, patterns: tuple[str, ...]) -> float | None:

@@ -96,6 +96,10 @@ class GcodeMetadataTests(unittest.TestCase):
         meta = parse_gcode_comments("G28\nM73 P0 R22\nG1 X0\n")
         self.assertEqual(meta["estimated_time_seconds"], 22 * 60)
 
+    def test_compact_comment_duration(self):
+        meta = parse_gcode_comments("; total estimated time: 2h15m\n")
+        self.assertEqual(meta["estimated_time_seconds"], 2 * 3600 + 15 * 60)
+
     def test_empty(self):
         self.assertEqual(parse_gcode_metadata("G28\nG1 X10\n"), {})
 
