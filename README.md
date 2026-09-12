@@ -36,7 +36,7 @@ The script installs Docker if needed (Linux), writes `.env` with random secrets,
 2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm.
 3. Add real printers (OctoPrint, Moonraker/Klipper, Creality K1/K2) when ready.
 
-If the login screen appears instead of the wizard, leftover Docker volumes still have an old database. Reset shop data (this wipes Postgres) and start again:
+If the wizard does not appear, login fails, or backend logs say **password authentication failed**, leftover Docker volumes still have an old database password. Reset shop data (this wipes Postgres) and start again:
 
 ```bash
 ./install.sh --reset

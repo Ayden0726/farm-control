@@ -262,6 +262,12 @@ else
   echo "Containers are starting, but the UI is not answering yet."
   echo "Recent backend logs:"
   compose logs backend --tail 80 || true
+  if compose logs backend 2>/dev/null | grep -q "password authentication failed"; then
+    echo
+    echo "The Postgres volume still has a password from an earlier install."
+    echo "Wipe it and start clean (this deletes farm data) with:"
+    echo "  ./install.sh --reset"
+  fi
   echo
   echo "Check live logs with: docker compose logs -f"
 fi
