@@ -26,6 +26,7 @@ export default function PrintersPage() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [howToFix, setHowToFix] = useState<string[]>([]);
   const [pending, setPending] = useState<{ type: "retire" | "delete"; printer: Printer } | null>(null);
   const [acting, setActing] = useState(false);
   const [form, setForm] = useState({

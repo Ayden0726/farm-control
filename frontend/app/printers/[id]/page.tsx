@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDuration, formatHours } from "@/lib/format";
 import { QrDialog } from "@/components/qr-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 export default function PrinterDetailPage() {
   const params = useParams<{ id: string }>();
