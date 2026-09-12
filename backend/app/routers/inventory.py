@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import (
+    GCodeFile,
     Part,
     PartBin,
     PrintJob,
@@ -164,14 +165,19 @@ async def inspect_qc(
             notes=f"scrapped {payload.failed}" + (f" ({payload.failure_reason})" if payload.failure_reason else ""),
         )
     if batch.production_run_item_id:
-        item = await db.get(ProductionRunItem, batch.production_run_item_id)
+        from app.services.farm_settings import get_mes
+        from app.services.queue import enqueue_jobs_for_item
+
+        item = (
+            await db.execute(
+                select(ProductionRunItem)
+                .options(selectinload(ProductionRunItem.gcode_file))
+                .where(ProductionRunItem.id == batch.production_run_item_id)
+            )
+        ).scalar_one_or_none()
         if item:
             item.passed_qc += payload.passed
             item.failed_qc += payload.failed
-            from app.services.farm_settings import get_mes
-            from app.services.queue import enqueue_jobs_for_item
-            from app.models import GCodeFile
-
             mes = await get_mes(db)
             if payload.failed and mes.get("auto_requeue_failed_qc"):
                 gcode = item.gcode_file
@@ -179,6 +185,7 @@ async def inspect_qc(
                     gcode = await db.get(GCodeFile, item.gcode_file_id)
                 if gcode:
                     item.required_qty += payload.failed
+                    await db.flush()
                     await enqueue_jobs_for_item(db, item, gcode)
     from app.services.audit import record_audit
 

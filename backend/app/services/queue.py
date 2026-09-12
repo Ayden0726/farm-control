@@ -62,8 +62,10 @@ async def enqueue_jobs_for_item(
         db.add(job)
         created.append(job)
         pos += 1
-    if item.production_run and item.production_run.status == ProductionRunStatus.draft:
-        item.production_run.status = ProductionRunStatus.queued
+    if item.production_run_id:
+        run = await db.get(ProductionRun, item.production_run_id)
+        if run and run.status == ProductionRunStatus.draft:
+            run.status = ProductionRunStatus.queued
     await db.flush()
     return created
 
