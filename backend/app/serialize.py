@@ -111,7 +111,7 @@ def job_out(job: PrintJob) -> JobOut:
         filament_available_g=getattr(job, "filament_available_g", 0) or 0,
         required_material=job.gcode_file.material if job.gcode_file else None,
         required_color=job.gcode_file.required_color if job.gcode_file else None,
-        spool_code=job.spool.public_code if getattr(job, "spool", None) else None,
+        spool_code=(job.__dict__.get("spool").public_code if job.__dict__.get("spool") is not None else None),
     )
 
 

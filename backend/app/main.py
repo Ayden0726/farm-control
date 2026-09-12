@@ -5,9 +5,9 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
@@ -71,12 +71,16 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(upgrade_schema)
     async with SessionLocal() as db:
-        from app.seed_filament import ensure_filament_system
-        from app.services.notifications import ensure_defaults
+        try:
+            from app.seed_filament import ensure_filament_system
+            from app.services.notifications import ensure_defaults
 
-        await ensure_defaults(db)
-        await ensure_filament_system(db)
-        await db.commit()
+            await ensure_defaults(db)
+            await ensure_filament_system(db)
+            await db.commit()
+        except Exception:
+            logger.exception("startup seed failed — API will still serve first-run setup")
+            await db.rollback()
     task = None
     if settings.run_scheduler:
         task = asyncio.create_task(_scheduler_loop())
@@ -106,6 +110,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @application.exception_handler(RequestValidationError)
+    async def invalid_payload(_: Request, exc: RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     @application.exception_handler(Exception)
     async def unhandled(_: Request, exc: Exception):

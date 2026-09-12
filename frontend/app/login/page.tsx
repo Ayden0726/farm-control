@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api, AuthUser, setToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,25 @@ const fieldClass =
 function LoginForm() {
   const params = useSearchParams();
   const [busy, setBusy] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/setup/status", { cache: "no-store" })
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!cancelled && data?.needs_setup) {
+          setNeedsSetup(true);
+          window.location.replace("/setup");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setNeedsSetup(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -58,7 +78,8 @@ function LoginForm() {
             <input
               id="email"
               name="email"
-              type="email"
+              type="text"
+              inputMode="email"
               autoComplete="username"
               defaultValue="ops@rackkit.local"
               required
@@ -79,6 +100,12 @@ function LoginForm() {
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </Button>
+          <p className="text-center text-xs text-zinc-500">
+            {needsSetup ? "First-time install — " : "No admin account yet? "}
+            <Link href="/setup" className="text-amber-300 hover:underline">
+              Open the setup wizard
+            </Link>
+          </p>
         </div>
       </form>
     </div>

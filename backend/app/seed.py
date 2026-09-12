@@ -56,6 +56,7 @@ async def seed_demo(db: AsyncSession) -> None:
         return
 
     settings = get_settings()
+    settings.gcode_dir.mkdir(parents=True, exist_ok=True)
     now = utcnow()
 
     parts_spec = [

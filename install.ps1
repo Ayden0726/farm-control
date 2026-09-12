@@ -3,7 +3,8 @@
 #   .\install.ps1
 #   .\install.ps1 -HostUrl http://192.168.1.50:3000
 param(
-  [string]$HostUrl = ""
+  [string]$HostUrl = "",
+  [switch]$Reset
 )
 
 $ErrorActionPreference = "Stop"
@@ -99,6 +100,10 @@ RUN_SCHEDULER=false
 
 Write-Host "==> Starting Print FarmOS (first run builds images and can take several minutes)"
 New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot "data\update") | Out-Null
+if ($Reset) {
+  Write-Host "==> Resetting farm data (docker compose down -v)"
+  docker compose down -v --remove-orphans
+}
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) {
   Write-Error "docker compose failed"
@@ -109,8 +114,9 @@ Write-Host "Print FarmOS is starting."
 Write-Host "  Open:  $HostUrl"
 Write-Host "  Local: http://127.0.0.1:3000"
 Write-Host ""
-Write-Host "First visit opens the setup wizard. Create an admin account."
+Write-Host "First visit opens the setup wizard at $HostUrl/setup — create an admin account."
 Write-Host "Uncheck Load demo data if this is a live shop."
+Write-Host "If the wizard does not appear (leftover database), run: .\install.ps1 -Reset"
 Write-Host ""
 Write-Host "Stop:    docker compose down"
 Write-Host "Update:  Settings → Update Print FarmOS, or .\update.ps1"

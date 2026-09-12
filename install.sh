@@ -9,12 +9,17 @@ cd "$(dirname "$0")"
 
 HOST_URL=""
 HOST_SET=0
+RESET=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host)
       HOST_URL="${2:-}"
       HOST_SET=1
       shift 2
+      ;;
+    --reset)
+      RESET=1
+      shift
       ;;
     -h|--help)
       cat <<'EOF'
@@ -23,9 +28,13 @@ Print FarmOS installer
 Usage:
   ./install.sh
   ./install.sh --host http://192.168.1.50:3000
+  ./install.sh --reset
 
 This script installs Docker if needed, writes a .env file, and starts the app.
 Open the printed URL and complete the first-run wizard.
+
+--reset  Stop containers and delete Postgres/Redis volumes so the setup wizard
+         runs again. Shop data is wiped. The .env file is kept.
 EOF
       exit 0
       ;;
@@ -219,6 +228,10 @@ fi
 say "Starting Print FarmOS (first run builds images and can take several minutes)"
 mkdir -p data/update
 chmod 777 data/update 2>/dev/null || true
+if [[ "$RESET" -eq 1 ]]; then
+  say "Resetting farm data (docker compose down -v)"
+  compose down -v --remove-orphans || true
+fi
 if [[ -d .git ]]; then
   APP_VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
   export APP_VERSION
@@ -228,10 +241,10 @@ if [[ -d .git ]]; then
 fi
 compose up -d --build
 
-say "Waiting for the UI"
+say "Waiting for the UI and setup API"
 ready=0
 for _ in $(seq 1 90); do
-  if curl -fsS "http://127.0.0.1:3000" >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:3000/api/v1/setup/status" >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -248,8 +261,9 @@ echo
 echo "  Open:  ${HOST_URL}"
 echo "  Local: http://127.0.0.1:3000"
 echo
-echo "First visit opens the setup wizard. Create an admin account."
+echo "First visit opens the setup wizard at ${HOST_URL}/setup — create an admin account."
 echo "Uncheck Load demo data if this is a live shop."
+echo "If the wizard does not appear (leftover database), run: ./install.sh --reset"
 echo
 echo "Stop:    docker compose down"
 echo "Update:  Settings → Update Print FarmOS, or ./update.sh"

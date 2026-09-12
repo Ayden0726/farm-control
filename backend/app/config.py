@@ -64,7 +64,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    settings.gcode_dir.mkdir(parents=True, exist_ok=True)
-    settings.stl_dir.mkdir(parents=True, exist_ok=True)
-    settings.qr_dir.mkdir(parents=True, exist_ok=True)
+    for path in (settings.gcode_dir, settings.stl_dir, settings.qr_dir):
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
     return settings

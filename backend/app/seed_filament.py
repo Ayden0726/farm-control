@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 
 from sqlalchemy import delete, select
@@ -25,6 +26,8 @@ from app.models import (
 from app.services.barcodes import bin_public_code, printer_public_code, product_barcode_id, unique_public_code
 from app.services.filament import DEFAULT_SPEND, audit, cost_per_kg, next_po_reference, next_spool_number, spool_code
 from app.util import new_qr_token
+
+logger = logging.getLogger("farmos.filament")
 
 LOCATIONS = [
     ("Filament Shelf A", "shelf"),
@@ -72,6 +75,18 @@ async def clear_seeded_filament_inventory(db: AsyncSession) -> None:
     flag = await db.get(AppSetting, "cleared_seed_filament")
     if flag is not None:
         return
+    try:
+        await _clear_seeded_filament_inventory(db)
+    except Exception:
+        await db.rollback()
+        logger.exception("could not clear seeded filament; continuing startup")
+        existing = await db.get(AppSetting, "cleared_seed_filament")
+        if existing is None:
+            db.add(AppSetting(key="cleared_seed_filament", value=True))
+            await db.flush()
+
+
+async def _clear_seeded_filament_inventory(db: AsyncSession) -> None:
 
     spools = list(
         (

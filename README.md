@@ -30,11 +30,19 @@ cd farm-control
 
 The GitHub repo is private, so Git will ask you to sign in. Use a [personal access token](https://github.com/settings/tokens) as the password (`repo` scope).
 
-The script installs Docker if needed (Linux), writes `.env` with random secrets, and starts the stack. Open the URL it prints (usually `http://YOUR_SERVER_IP:3000`).
+The script installs Docker if needed (Linux), writes `.env` with random secrets, and starts the stack. Open the URL it prints (usually `http://YOUR_SERVER_IP:3000`). First visit should land on `/setup`.
 
 1. Complete the first-run setup wizard (admin account).
 2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm.
 3. Add real printers (OctoPrint, Moonraker/Klipper, Creality K1/K2) when ready.
+
+If the login screen appears instead of the wizard, leftover Docker volumes still have an old database. Reset shop data (this wipes Postgres) and start again:
+
+```bash
+./install.sh --reset
+```
+
+Windows: `.\install.ps1 -Reset`
 
 If phones or other PCs will use a specific address:
 
