@@ -36,34 +36,9 @@ def parse_quantity_from_filename(filename: str) -> int:
 
 def parse_gcode_metadata(content: str) -> dict[str, float | int]:
     """Extract slicer comments for time and filament usage."""
-    result: dict[str, float | int] = {}
-    time_match = re.search(r";\s*TIME:\s*(\d+)", content, re.IGNORECASE)
-    if time_match:
-        result["estimated_time_seconds"] = int(time_match.group(1))
-    time_hms = re.search(
-        r";\s*estimated printing time.*=\s*(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?",
-        content,
-        re.IGNORECASE,
-    )
-    if time_hms and "estimated_time_seconds" not in result:
-        h, m, s = (int(x) if x else 0 for x in time_hms.groups())
-        result["estimated_time_seconds"] = h * 3600 + m * 60 + s
-    gram_match = re.search(r";\s*filament used \[g\]\s*=\s*([\d.]+)", content, re.IGNORECASE)
-    if gram_match:
-        result["estimated_filament_grams"] = float(gram_match.group(1))
-    else:
-        meter_match = re.search(
-            r";\s*filament used(?: \[mm\])?\s*=\s*([\d.]+)", content, re.IGNORECASE
-        )
-        if meter_match:
-            mm = float(meter_match.group(1))
-            # 1.75mm PETG ~ 0.0033 g/mm as a rough farm estimate
-            result["estimated_filament_grams"] = round(mm * 0.0033, 2)
-        else:
-            used = re.search(r";\s*Filament used:\s*([\d.]+)\s*m", content, re.IGNORECASE)
-            if used:
-                result["estimated_filament_grams"] = round(float(used.group(1)) * 3.3, 2)
-    return result
+    from app.services.gcode_meta import parse_gcode_metadata as _parse
+
+    return _parse(content)
 
 
 def jobs_needed(required_qty: int, quantity_per_file: int) -> int:

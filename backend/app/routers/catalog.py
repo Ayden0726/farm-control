@@ -13,6 +13,7 @@ from app.deps import get_current_user
 from app.models import (
     GCodeFile,
     GCodePrinterCompat,
+    JobStatus,
     Part,
     PartCostSnapshot,
     PrintJob,
@@ -24,9 +25,10 @@ from app.models import (
 from app.schemas import GCodeOut, GCodeUpdate, PartIn, PartOut, StlOut
 from app.serialize import gcode_out
 from app.services.farm_settings import get_automation
+from app.services.gcode_meta import apply_gcode_estimates, parse_gcode_file, parse_gcode_file_bytes
 from app.services.inventory import get_or_create_stock
 from app.services.stl import bounding_box, copies_on_plate
-from app.util import parse_gcode_metadata, parse_quantity_from_filename
+from app.util import parse_quantity_from_filename
 
 parts_router = APIRouter(prefix="/parts", tags=["parts"])
 gcode_router = APIRouter(prefix="/gcode", tags=["gcode"])
@@ -113,12 +115,7 @@ async def upload_gcode(
     content = await file.read()
     dest = settings.gcode_dir / filename
     dest.write_bytes(content)
-    text = ""
-    try:
-        text = content.decode("utf-8", errors="ignore")[:80_000]
-    except Exception:
-        text = ""
-    meta = parse_gcode_metadata(text)
+    meta = parse_gcode_file_bytes(content)
     parsed = parse_quantity_from_filename(filename)
     if quantity_per_file is not None:
         qty = max(1, min(int(quantity_per_file), 999))
@@ -146,6 +143,10 @@ async def upload_gcode(
         version=version,
         notes=notes,
         file_size_bytes=len(content),
+        slicer=str(meta.get("slicer") or ""),
+        layer_height_mm=meta.get("layer_height_mm") if isinstance(meta.get("layer_height_mm"), (int, float)) else None,
+        nozzle_mm=meta.get("nozzle_mm") if isinstance(meta.get("nozzle_mm"), (int, float)) else None,
+        required_nozzle_mm=meta.get("required_nozzle_mm") if isinstance(meta.get("required_nozzle_mm"), (int, float)) else None,
     )
     db.add(gcode)
     await db.flush()
@@ -160,6 +161,58 @@ async def upload_gcode(
         )
     ).scalar_one()
     return gcode_out(gcode)
+
+
+async def _sync_queued_job_estimates(db: AsyncSession, gcode: GCodeFile) -> int:
+    rows = (
+        await db.execute(
+            select(PrintJob).where(
+                PrintJob.gcode_file_id == gcode.id,
+                PrintJob.status.in_((JobStatus.queued, JobStatus.held)),
+            )
+        )
+    ).scalars().all()
+    for job in rows:
+        job.estimated_time_seconds = gcode.estimated_time_seconds
+        job.estimated_filament_grams = gcode.estimated_filament_grams
+        job.filament_required_g = gcode.estimated_filament_grams
+    return len(rows)
+
+
+@gcode_router.post("/refresh-estimates")
+async def refresh_gcode_estimates(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    rows = (await db.execute(select(GCodeFile))).scalars().all()
+    updated = 0
+    missing = 0
+    no_time = 0
+    no_filament = 0
+    jobs_updated = 0
+    for gcode in rows:
+        path = Path(gcode.stored_path) if gcode.stored_path else None
+        if not path or not path.is_file():
+            missing += 1
+            continue
+        try:
+            meta = parse_gcode_file(path)
+        except OSError:
+            missing += 1
+            continue
+        if "estimated_time_seconds" not in meta:
+            no_time += 1
+        if "estimated_filament_grams" not in meta:
+            no_filament += 1
+        if apply_gcode_estimates(gcode, meta):
+            updated += 1
+            jobs_updated += await _sync_queued_job_estimates(db, gcode)
+    await db.commit()
+    return {
+        "updated": updated,
+        "scanned": len(rows),
+        "missing_file": missing,
+        "missing_time": no_time,
+        "missing_filament": no_filament,
+        "queued_jobs_updated": jobs_updated,
+    }
 
 
 @gcode_router.patch("/{gcode_id}", response_model=GCodeOut)

@@ -45,6 +45,7 @@ export default function LibraryPage() {
   const [edit, setEdit] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<GCode | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
     const [gcode, models, partRows, settings, printerRows] = await Promise.all([
@@ -221,7 +222,46 @@ export default function LibraryPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-300">G-code (queue)</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium text-zinc-300">G-code (queue)</h2>
+          <p className="text-xs text-zinc-500">
+            Time and filament come from slicer comments at the start and end of the file (Cura, Prusa, Orca, Bambu).
+            Re-read after an upload if an older file still shows the 1 h / 20 g fallback.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={refreshing}
+          onClick={async () => {
+            setRefreshing(true);
+            try {
+              const res = await api<{
+                updated: number;
+                scanned: number;
+                missing_file: number;
+                queued_jobs_updated: number;
+              }>("/api/v1/gcode/refresh-estimates", { method: "POST" });
+              toast.success(
+                res.updated
+                  ? `Updated ${res.updated} of ${res.scanned} files${res.queued_jobs_updated ? `, ${res.queued_jobs_updated} queued jobs` : ""}.`
+                  : `Scanned ${res.scanned} files. No slicer estimates changed.`,
+              );
+              if (res.missing_file) {
+                toast.message(`${res.missing_file} file(s) are missing on disk.`);
+              }
+              load();
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not re-read G-code");
+            } finally {
+              setRefreshing(false);
+            }
+          }}
+        >
+          {refreshing ? "Reading files…" : "Re-read estimates"}
+        </Button>
+      </div>
         <Table>
           <TableHeader>
             <TableRow>
