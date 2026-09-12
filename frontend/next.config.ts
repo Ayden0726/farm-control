@@ -5,7 +5,10 @@ const api = process.env.API_INTERNAL_URL || "http://127.0.0.1:8472";
 const nextConfig: NextConfig = {
   output: "standalone",
   async rewrites() {
-    return [{ source: "/health", destination: `${api}/health` }];
+    return [
+      { source: "/api/:path*", destination: `${api}/api/:path*` },
+      { source: "/health", destination: `${api}/health` },
+    ];
   },
   async headers() {
     return [

@@ -241,10 +241,14 @@ if [[ -d .git ]]; then
 fi
 compose up -d --build
 
-say "Waiting for the UI and setup API"
+say "Waiting for the API, then the UI"
 ready=0
 for _ in $(seq 1 90); do
-  if curl -fsS "http://127.0.0.1:3000/api/v1/setup/status" >/dev/null 2>&1; then
+  api_ok=0
+  ui_ok=0
+  curl -fsS "http://127.0.0.1:8000/health" >/dev/null 2>&1 && api_ok=1
+  curl -fsS "http://127.0.0.1:3000/api/v1/setup/status" >/dev/null 2>&1 && ui_ok=1
+  if [[ "$api_ok" -eq 1 && "$ui_ok" -eq 1 ]]; then
     ready=1
     break
   fi

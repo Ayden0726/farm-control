@@ -20,12 +20,16 @@ export default function SetupPage() {
   const [busy, setBusy] = useState(false);
   const [apiDown, setApiDown] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
+  const [waitedMs, setWaitedMs] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     async function check() {
       try {
-        const r = await fetch("/api/v1/setup/status", { cache: "no-store" });
+        const r = await fetch("/api/v1/setup/status", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(4000),
+        });
         const data = await r.json().catch(() => null);
         if (cancelled) return;
         if (!r.ok) {
@@ -39,10 +43,12 @@ export default function SetupPage() {
       }
     }
     check();
-    const id = setInterval(check, 3000);
+    const poll = setInterval(check, 1500);
+    const tick = setInterval(() => setWaitedMs((ms) => ms + 1500), 1500);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearInterval(poll);
+      clearInterval(tick);
     };
   }, []);
 
@@ -89,8 +95,11 @@ export default function SetupPage() {
         </p>
         {apiDown && (
           <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            The API is still starting. This form will work as soon as the backend is up — wait a few
-            seconds, or refresh.
+            Waiting for the farm API. The UI can appear first; the API usually comes up within a
+            minute after Postgres is healthy. This banner clears by itself — no refresh needed.
+            {waitedMs >= 120000
+              ? " Still down after two minutes — in WSL run: docker compose logs backend"
+              : ""}
           </p>
         )}
         {alreadyDone && (
@@ -142,8 +151,8 @@ export default function SetupPage() {
               orders.
             </span>
           </label>
-          <Button type="submit" className="w-full" disabled={busy || alreadyDone}>
-            {busy ? "Creating farm…" : "Complete setup"}
+          <Button type="submit" className="w-full" disabled={busy || alreadyDone || apiDown}>
+            {apiDown ? "Waiting for API…" : busy ? "Creating farm…" : "Complete setup"}
           </Button>
         </div>
       </form>
