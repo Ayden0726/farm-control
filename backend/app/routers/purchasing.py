@@ -64,6 +64,7 @@ class ReceivePoIn(BaseModel):
     quantity: int = Field(ge=1, le=500)
     cost_per_spool: float | None = None
     location_id: UUID | None = None
+    drying_status: str = "needs_drying"
 
 
 class ModifyPoIn(BaseModel):
@@ -419,16 +420,20 @@ async def receive_po(
     if payload.quantity > outstanding:
         raise HTTPException(400, f"Only {outstanding} rolls are still outstanding on this line.")
     cost = payload.cost_per_spool if payload.cost_per_spool is not None else line.unit_price
-    spools = await create_spools_from_receive(
-        db,
-        line.product,
-        payload.quantity,
-        cost,
-        supplier_id=po.supplier_id,
-        purchase_order_id=po.id,
-        location_id=payload.location_id,
-        actor=user.email,
-    )
+    try:
+        spools = await create_spools_from_receive(
+            db,
+            line.product,
+            payload.quantity,
+            cost,
+            supplier_id=po.supplier_id,
+            purchase_order_id=po.id,
+            location_id=payload.location_id,
+            actor=user.email,
+            drying_status=payload.drying_status,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     line.quantity_received += payload.quantity
     ordered = sum(ln.quantity_ordered for ln in po.lines)
     received = sum(ln.quantity_received for ln in po.lines)

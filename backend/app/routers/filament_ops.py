@@ -94,6 +94,7 @@ class ReceiveIn(BaseModel):
     location_id: UUID | None = None
     date_purchased: datetime | None = None
     notes: str = ""
+    drying_status: str = "needs_drying"
 
 
 class AssignIn(BaseModel):
@@ -485,6 +486,7 @@ async def receive_filament(
             date_purchased=payload.date_purchased,
             notes=payload.notes,
             actor=user.email,
+            drying_status=payload.drying_status,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

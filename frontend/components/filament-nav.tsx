@@ -17,7 +17,7 @@ const ITEMS = [
 export function FilamentNav() {
   const pathname = usePathname();
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden">
       {ITEMS.map((item) => {
         const active = item.href === "/filament" ? pathname === "/filament" : pathname.startsWith(item.href);
         return (
@@ -25,7 +25,7 @@ export function FilamentNav() {
             key={item.href}
             href={item.href}
             className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium",
+              "shrink-0 rounded-full px-3 py-2.5 text-sm font-medium lg:py-1.5 lg:text-xs",
               active ? "bg-amber-500/20 text-amber-200" : "bg-white/5 text-zinc-400 hover:text-zinc-100",
             )}
           >

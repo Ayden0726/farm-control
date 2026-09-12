@@ -54,7 +54,19 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+const MOBILE_TABS = [
+  { href: "/scan", label: "Scan", icon: ScanLine },
+  { href: "/queue", label: "Queue", icon: Factory },
+  { href: "/printers", label: "Printers", icon: Printer },
+  { href: "/inventory", label: "QC", icon: ClipboardCheck },
+  { href: "/filament", label: "Filament", icon: Package },
+];
+
 type Note = { id: string; title: string; is_read: boolean; severity: string };
+
+function pathActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -83,7 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const title = useMemo(
-    () => NAV.find((n) => (n.href === "/" ? pathname === "/" : pathname.startsWith(n.href)))?.label || "FarmOS",
+    () => NAV.find((n) => pathActive(pathname, n.href))?.label || "FarmOS",
     [pathname],
   );
 
@@ -91,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <nav className="flex flex-col gap-0.5 px-2">
         {NAV.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathActive(pathname, item.href);
           const Icon = item.icon;
           return (
             <Link
@@ -99,7 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href={item.href}
               onClick={onClick}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                "flex min-h-11 items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors lg:min-h-0 lg:py-2",
                 active
                   ? "bg-amber-500/15 text-amber-200"
                   : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100",
@@ -115,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-dvh bg-background">
       <aside className="hidden w-60 shrink-0 border-r border-white/5 bg-[#0b0f14] lg:flex lg:flex-col">
         <div className="flex items-center gap-2.5 px-4 py-5">
           <div className="flex size-9 items-center justify-center rounded-md bg-amber-500 text-sm font-bold text-zinc-950">
@@ -131,22 +143,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b border-white/5 bg-[#0d1218]/90 px-4 py-3 backdrop-blur">
-          <div className="flex items-center gap-2">
+        <header className="sticky top-0 z-40 flex items-center justify-between gap-2 border-b border-white/5 bg-[#0d1218]/90 px-3 py-2 backdrop-blur pt-[max(0.5rem,env(safe-area-inset-top))] md:px-4 md:py-3">
+          <div className="flex min-w-0 items-center gap-2">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger
-                render={<Button variant="ghost" size="icon" className="lg:hidden" />}
+                render={<Button variant="ghost" size="icon" className="size-11 lg:hidden" />}
               >
-                <Menu className="size-4" />
+                <Menu className="size-5" />
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 bg-[#0b0f14] p-0">
+              <SheetContent side="left" className="w-[min(18rem,90vw)] bg-[#0b0f14] p-0">
                 <div className="px-4 py-5 text-sm font-semibold">Print FarmOS</div>
-                <NavList onClick={() => setOpen(false)} />
+                <div className="overflow-y-auto pb-8">
+                  <NavList onClick={() => setOpen(false)} />
+                </div>
               </SheetContent>
             </Sheet>
-            <h1 className="text-base font-semibold text-zinc-100">{title}</h1>
+            <h1 className="truncate text-base font-semibold text-zinc-100">{title}</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 md:gap-2">
             <form
               className="hidden md:block"
               onSubmit={(e) => {
@@ -160,35 +174,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Input name="q" placeholder="Search orders, parts, bins…" className="h-8 w-52 pl-7 text-xs" />
               </div>
             </form>
-            <Link href="/scan" className="lg:hidden">
-              <Button variant="ghost" size="icon">
-                <ScanLine className="size-4" />
+            <Link href="/search" className="md:hidden">
+              <Button variant="ghost" size="icon" className="size-11">
+                <Search className="size-5" />
               </Button>
             </Link>
             <Link href="/notifications" className="relative">
-              <Button variant="ghost" size="icon">
-                <Bell className="size-4" />
+              <Button variant="ghost" size="icon" className="size-11 lg:size-8">
+                <Bell className="size-5 lg:size-4" />
               </Button>
               {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-zinc-950">
+                <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-zinc-950 lg:-right-0.5 lg:-top-0.5">
                   {unread > 9 ? "9+" : unread}
                 </span>
               )}
             </Link>
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
+              className="size-11 lg:h-8 lg:w-auto lg:px-2.5"
               onClick={() => {
                 setToken(null);
                 router.push("/login");
               }}
             >
-              <LogOut className="size-4" />
-              Sign out
+              <LogOut className="size-5 lg:size-4" />
+              <span className="hidden lg:inline">Sign out</span>
             </Button>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-x-hidden p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-6 lg:pb-6">
+          {children}
+        </main>
+        <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/10 bg-[#0d1218]/95 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur lg:hidden">
+          {MOBILE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = pathActive(pathname, tab.href);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={cn(
+                  "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
+                  active ? "text-amber-200" : "text-zinc-500",
+                )}
+              >
+                <Icon className="size-5" />
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );

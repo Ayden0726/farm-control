@@ -241,7 +241,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="hidden justify-end lg:flex">
         <Link href="/scan" className={cn(buttonVariants({ size: "lg" }), "h-12 min-w-28 gap-2 text-base")}>
           <ScanLine className="size-5" />
           SCAN

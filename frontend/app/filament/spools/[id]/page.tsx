@@ -13,6 +13,7 @@ import { labelsPrintHref } from "@/lib/labels";
 import { toast } from "sonner";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { DryingChoice, DryingStatusValue, dryingLabel } from "@/components/drying-choice";
 
 type Spool = {
   id: string;
@@ -43,7 +44,7 @@ type Spool = {
   transactions: { id: string; at: string; previous_g: number; amount_g: number; remaining_g: number; reason: string; notes: string }[];
 };
 
-type Loc = { id: string; name: string };
+type Loc = { id: string; name: string; kind?: string };
 type Printer = { id: string; name: string };
 
 export default function SpoolDetailPage() {
@@ -69,6 +70,24 @@ export default function SpoolDetailPage() {
   async function move(location_id: string) {
     await api(`/api/v1/filament/spools/${params.id}/move`, { method: "POST", body: JSON.stringify({ location_id }) });
     toast.success("Location updated");
+    load();
+  }
+
+  async function setDrying(status: DryingStatusValue) {
+    await api(`/api/v1/filament/spools/${params.id}/detail`, {
+      method: "PATCH",
+      body: JSON.stringify({ drying_status: status }),
+    });
+    if (status === "drying") {
+      const dryer = locs.find((l) => l.kind === "dryer" || /dryer/i.test(l.name));
+      if (dryer && spool?.location_id !== dryer.id) {
+        await api(`/api/v1/filament/spools/${params.id}/move`, {
+          method: "POST",
+          body: JSON.stringify({ location_id: dryer.id }),
+        });
+      }
+    }
+    toast.success("Drying updated");
     load();
   }
 
@@ -117,7 +136,8 @@ export default function SpoolDetailPage() {
       <p className="text-sm text-zinc-400">
         Received {spool.date_received ? new Date(spool.date_received).toLocaleDateString() : "—"}
         {spool.purchase_date ? ` · purchased ${new Date(spool.purchase_date).toLocaleDateString()}` : ""}
-        · Location: {spool.location_name || "—"} · Printer: {spool.assigned_printer_name || "—"} · Drying: {spool.drying_status}
+        · Location: {spool.location_name || "—"} · Printer: {spool.assigned_printer_name || "—"} · Drying: {dryingLabel(spool.drying_status)}
+        {spool.last_dried_at ? ` · last dried ${new Date(spool.last_dried_at).toLocaleString()}` : ""}
       </p>
       <p className="text-xs text-zinc-500">
         This roll keeps the ${spool.cost.toFixed(2)} paid when it arrived, even if the profile’s normal price changes later.
@@ -125,7 +145,7 @@ export default function SpoolDetailPage() {
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">
           <Label>Move to location</Label>
-          <select className="h-10 w-full rounded-lg border border-input bg-transparent px-2" defaultValue="" onChange={(e) => e.target.value && move(e.target.value)}>
+          <select className="h-12 w-full rounded-lg border border-input bg-transparent px-2" defaultValue="" onChange={(e) => e.target.value && move(e.target.value)}>
             <option value="">Choose…</option>
             {locs.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
@@ -134,7 +154,7 @@ export default function SpoolDetailPage() {
         </div>
         <div className="space-y-1">
           <Label>Assign to printer</Label>
-          <select className="h-10 w-full rounded-lg border border-input bg-transparent px-2" defaultValue="" onChange={(e) => e.target.value && assign(e.target.value)}>
+          <select className="h-12 w-full rounded-lg border border-input bg-transparent px-2" defaultValue="" onChange={(e) => e.target.value && assign(e.target.value)}>
             <option value="">Choose…</option>
             {printers.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -142,6 +162,7 @@ export default function SpoolDetailPage() {
           </select>
         </div>
       </div>
+      <DryingChoice value={spool.drying_status} onChange={setDrying} />
       <form onSubmit={adjust} className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
           <Label>Correct remaining grams</Label>

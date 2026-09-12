@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { LABEL_PRESETS, LabelLayout, labelsPrintHref } from "@/lib/labels";
+import { DryingChoice, DryingStatusValue, dryingLabel } from "@/components/drying-choice";
 
 export type ProfileForRolls = {
   id: string;
@@ -22,8 +23,8 @@ export type ProfileForRolls = {
   preferred_supplier_id?: string | null;
 };
 
-type Loc = { id: string; name: string };
-type Created = { id: string; public_code: string };
+type Loc = { id: string; name: string; kind?: string };
+type Created = { id: string; public_code: string; drying_status?: string };
 
 type ReceiveResult = {
   message: string;
@@ -44,6 +45,7 @@ export function AddRollsPanel({
   const [qty, setQty] = useState("5");
   const [cost, setCost] = useState(String(product.normal_price || product.purchase_cost || ""));
   const [locationId, setLocationId] = useState("");
+  const [drying, setDrying] = useState<DryingStatusValue>("needs_drying");
   const [locs, setLocs] = useState<Loc[]>([]);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created[] | null>(null);
@@ -51,13 +53,29 @@ export function AddRollsPanel({
   const [layout, setLayout] = useState<LabelLayout>("sheet");
 
   useEffect(() => {
-    api<Loc[]>("/api/v1/filament/locations").then((rows) => {
-      setLocs(rows);
-      const sealed = rows.find((r) => /sealed|shelf/i.test(r.name));
-      if (sealed) setLocationId(sealed.id);
-      else if (rows[0]) setLocationId(rows[0].id);
-    }).catch(() => undefined);
+    api<Loc[]>("/api/v1/filament/locations")
+      .then((rows) => {
+        setLocs(rows);
+        const sealed = rows.find((r) => r.kind === "sealed" || /sealed|shelf/i.test(r.name));
+        if (sealed) setLocationId(sealed.id);
+        else if (rows[0]) setLocationId(rows[0].id);
+      })
+      .catch(() => undefined);
   }, []);
+
+  function applyDrying(next: DryingStatusValue) {
+    setDrying(next);
+    if (next === "drying") {
+      const dryer = locs.find((r) => r.kind === "dryer" || /dryer/i.test(r.name));
+      if (dryer) setLocationId(dryer.id);
+      return;
+    }
+    const current = locs.find((r) => r.id === locationId);
+    if (current && (current.kind === "dryer" || /dryer/i.test(current.name))) {
+      const sealed = locs.find((r) => r.kind === "sealed" || /sealed|shelf/i.test(r.name));
+      if (sealed) setLocationId(sealed.id);
+    }
+  }
 
   useEffect(() => {
     setCost(String(product.normal_price || product.purchase_cost || ""));
@@ -77,6 +95,7 @@ export function AddRollsPanel({
           quantity: count,
           cost_per_spool: cost === "" ? null : Number(cost),
           location_id: locationId || null,
+          drying_status: drying,
           supplier_id: product.preferred_supplier_id,
         }),
       });
@@ -93,7 +112,7 @@ export function AddRollsPanel({
 
   return (
     <Card className="border-amber-500/30">
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle>Add New Rolls</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -101,7 +120,7 @@ export function AddRollsPanel({
           </p>
         </div>
         {!open && !created && (
-          <Button className="h-11" onClick={() => setOpen(true)}>
+          <Button className="h-12 w-full sm:h-11 sm:w-auto" onClick={() => setOpen(true)}>
             Add New Rolls
           </Button>
         )}
@@ -111,7 +130,7 @@ export function AddRollsPanel({
           {!created && (
             <>
               <p className="text-sm text-zinc-400">
-                Manufacturer, material, colour, and size come from this saved profile. Only quantity, price, and location are needed.
+                Manufacturer, material, colour, and size come from this saved profile. Enter quantity, price, location, and whether the rolls need drying.
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1">
@@ -138,6 +157,7 @@ export function AddRollsPanel({
                   </select>
                 </div>
               </div>
+              <DryingChoice value={drying} onChange={applyDrying} />
               <Button className="h-12 w-full text-base" disabled={busy} onClick={create}>
                 {busy ? "Creating…" : `Create ${count} Roll${count === 1 ? "" : "s"}`}
               </Button>
@@ -157,6 +177,7 @@ export function AddRollsPanel({
                     <Link href={`/filament/spools/${s.id}`} className="hover:text-amber-200">
                       {s.public_code}
                     </Link>
+                    <span className="text-xs text-zinc-500">{dryingLabel(s.drying_status || drying)}</span>
                   </li>
                 ))}
               </ul>

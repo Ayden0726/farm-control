@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 const fieldClass =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+  "h-12 w-full min-w-0 rounded-lg border border-input bg-transparent px-3 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:h-8 md:px-2.5 md:py-1 md:text-sm dark:bg-input/30";
 
 function LoginForm() {
   const params = useSearchParams();
@@ -99,7 +99,7 @@ function LoginForm() {
               className={fieldClass}
             />
           </div>
-          <Button type="submit" className="w-full" disabled={busy}>
+          <Button type="submit" className="h-12 w-full text-base md:h-8 md:text-sm" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </Button>
           <p className="text-center text-xs text-zinc-500">

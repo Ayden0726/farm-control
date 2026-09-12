@@ -33,11 +33,11 @@ function SearchInner() {
         <CardTitle>Search</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order, part, printer, spool, bin, batch, G-code, PO…" autoFocus />
+        <Input className="h-12 text-base md:h-8 md:text-sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order, part, printer, spool, bin, batch, G-code, PO…" autoFocus />
         {hits.map((h) => (
           <button
             key={h.kind + h.id}
-            className="block w-full rounded-md border border-white/8 p-3 text-left text-sm hover:bg-white/5"
+            className="block min-h-14 w-full rounded-md border border-white/8 p-3 text-left text-sm hover:bg-white/5"
             onClick={() => router.push(h.path)}
           >
             <span className="text-xs uppercase text-zinc-500">{h.kind}</span>

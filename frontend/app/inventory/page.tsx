@@ -120,17 +120,18 @@ export default function InventoryPage() {
           {qc.length === 0 && <p className="text-sm text-zinc-500">No prints waiting inspection.</p>}
           <div className="space-y-3">
             {qc.map((batch) => (
-              <div key={batch.id} className="flex flex-wrap items-end gap-2 rounded-md border border-white/8 p-3">
+              <div key={batch.id} className="flex flex-col gap-3 rounded-md border border-white/8 p-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-2">
                 <div className="min-w-40 flex-1">
                   <div className="font-medium">{batch.part_sku}</div>
                   <div className="text-xs text-zinc-500">
                     {batch.gcode_filename} · {batch.quantity - batch.passed - batch.failed} of {batch.quantity} left
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:contents">
                 <div>
                   <Label className="text-xs">Passed</Label>
                   <Input
-                    className="w-20"
+                    className="h-12 w-full sm:h-8 sm:w-20"
                     type="number"
                     min={0}
                     value={pass[batch.id] ?? ""}
@@ -140,17 +141,18 @@ export default function InventoryPage() {
                 <div>
                   <Label className="text-xs">Failed</Label>
                   <Input
-                    className="w-20"
+                    className="h-12 w-full sm:h-8 sm:w-20"
                     type="number"
                     min={0}
                     value={fail[batch.id] ?? ""}
                     onChange={(e) => setFail({ ...fail, [batch.id]: e.target.value })}
                   />
                 </div>
-                <div>
+                </div>
+                <div className="w-full sm:w-auto">
                   <Label className="text-xs">Failure reason</Label>
                   <select
-                    className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                    className="h-12 w-full rounded-lg border border-input bg-transparent px-2 text-sm sm:h-8"
                     value={reason[batch.id] || ""}
                     onChange={(e) => setReason({ ...reason, [batch.id]: e.target.value })}
                   >
@@ -166,9 +168,9 @@ export default function InventoryPage() {
                 </div>
                 <div className="min-w-40 flex-1">
                   <Label className="text-xs">Notes</Label>
-                  <Input value={notes[batch.id] || ""} onChange={(e) => setNotes({ ...notes, [batch.id]: e.target.value })} />
+                  <Input className="h-12 sm:h-8" value={notes[batch.id] || ""} onChange={(e) => setNotes({ ...notes, [batch.id]: e.target.value })} />
                 </div>
-                <Button onClick={() => inspect(batch.id)}>Record QC</Button>
+                <Button className="h-12 w-full sm:h-8 sm:w-auto" onClick={() => inspect(batch.id)}>Record QC</Button>
               </div>
             ))}
           </div>

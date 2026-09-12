@@ -21,11 +21,14 @@ export const metadata: Metadata = {
   description: "Production control for the print farm.",
   applicationName: "Print FarmOS",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Print FarmOS" },
+  appleWebApp: { capable: true, title: "Print FarmOS", statusBarStyle: "black-translucent" },
 };
 
 export const viewport = {
   themeColor: "#d97706",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

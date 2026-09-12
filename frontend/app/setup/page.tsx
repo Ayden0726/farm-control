@@ -51,7 +51,7 @@ export default function SetupPage() {
     <div className="farm-grid flex min-h-screen items-center justify-center p-4">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#121820]/90 p-8 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#121820]/90 p-5 shadow-2xl sm:p-8"
       >
         <div className="mb-2 text-[11px] uppercase tracking-[0.2em] text-amber-400">First-run setup</div>
         <h1 className="text-2xl font-semibold">Stand up Print FarmOS</h1>
@@ -63,11 +63,11 @@ export default function SetupPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Company</Label>
-              <Input value={company} onChange={(e) => setCompany(e.target.value)} required />
+              <Input className="h-12 text-base md:h-8 md:text-sm" value={company} onChange={(e) => setCompany(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label>Your name</Label>
-              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+              <Input className="h-12 text-base md:h-8 md:text-sm" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -76,6 +76,7 @@ export default function SetupPage() {
               type="text"
               inputMode="email"
               autoComplete="username"
+              className="h-12 text-base md:h-8 md:text-sm"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -86,6 +87,7 @@ export default function SetupPage() {
             <Input
               type="password"
               autoComplete="new-password"
+              className="h-12 text-base md:h-8 md:text-sm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={8}
@@ -99,7 +101,7 @@ export default function SetupPage() {
               orders.
             </span>
           </label>
-          <Button type="submit" className="w-full" disabled={busy}>
+          <Button type="submit" className="h-12 w-full text-base md:h-8 md:text-sm" disabled={busy}>
             {busy ? "Creating farm…" : "Complete setup"}
           </Button>
         </div>

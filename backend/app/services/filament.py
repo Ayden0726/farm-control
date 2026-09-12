@@ -490,6 +490,38 @@ async def consume_for_job(db: AsyncSession, spool: FilamentSpool, job: PrintJob,
         job.filament_cost = (spool.cost / spool.initial_weight_g) * used
 
 
+def parse_drying_status(value: str | DryingStatus | None) -> DryingStatus:
+    if value is None or value == "":
+        return DryingStatus.unknown
+    if isinstance(value, DryingStatus):
+        return value
+    try:
+        return DryingStatus(str(value))
+    except ValueError as exc:
+        raise ValueError("Drying must be dry, drying, needs_drying, or unknown") from exc
+
+
+async def resolve_receive_location(
+    db: AsyncSession, location_id: UUID | None, drying: DryingStatus
+) -> UUID | None:
+    if location_id is not None:
+        return location_id
+    if drying == DryingStatus.drying:
+        dryer = (
+            await db.execute(
+                select(StorageLocation)
+                .where(StorageLocation.kind == "dryer", StorageLocation.is_active.is_(True))
+                .order_by(StorageLocation.name)
+            )
+        ).scalars().first()
+        if dryer:
+            return dryer.id
+    sealed = (
+        await db.execute(select(StorageLocation).where(StorageLocation.name == "Sealed Stock"))
+    ).scalar_one_or_none()
+    return sealed.id if sealed else None
+
+
 async def create_spools_from_receive(
     db: AsyncSession,
     product: FilamentProduct,
@@ -502,19 +534,18 @@ async def create_spools_from_receive(
     date_purchased: datetime | None = None,
     notes: str = "",
     actor: str = "operator",
+    drying_status: str | DryingStatus | None = None,
 ) -> list[FilamentSpool]:
     if quantity < 1 or quantity > 500:
         raise ValueError("Quantity must be between 1 and 500 rolls")
     created: list[FilamentSpool] = []
     now = utcnow()
+    drying = parse_drying_status(drying_status)
+    opened = drying in (DryingStatus.drying, DryingStatus.dry)
+    last_dried = now if drying == DryingStatus.dry else None
     cpk = cost_per_kg(cost_per_spool, product.filament_weight_g)
     size = product.spool_size_label or f"{kg(product.filament_weight_g)} kg"
-    loc = location_id
-    if loc is None:
-        sealed = (
-            await db.execute(select(StorageLocation).where(StorageLocation.name == "Sealed Stock"))
-        ).scalar_one_or_none()
-        loc = sealed.id if sealed else None
+    loc = await resolve_receive_location(db, location_id, drying)
     for _ in range(quantity):
         n = await next_spool_number(db)
         code = spool_code(n)
@@ -529,16 +560,18 @@ async def create_spools_from_receive(
             cost_per_kg=cpk,
             purchase_date=date_purchased or now,
             date_received=now,
+            date_opened=now if opened else None,
+            last_dried_at=last_dried,
             assigned_printer_id=None,
             product_id=product.id,
             location_id=loc,
             supplier_id=supplier_id or product.preferred_supplier_id,
             purchase_order_id=purchase_order_id,
-            drying_status=DryingStatus.unknown,
+            drying_status=drying,
             low_stock_threshold_g=max(150, product.filament_weight_g * 0.05),
             qr_token=new_qr_token(),
             public_code=code,
-            is_sealed=True,
+            is_sealed=not opened,
             is_empty=False,
             consumed_g=0,
             notes=notes,
@@ -555,6 +588,7 @@ async def create_spools_from_receive(
         {
             "quantity": quantity,
             "cost_per_spool": cost_per_spool,
+            "drying_status": drying.value,
             "spool_codes": [s.public_code for s in created],
             "purchase_order_id": str(purchase_order_id) if purchase_order_id else None,
         },

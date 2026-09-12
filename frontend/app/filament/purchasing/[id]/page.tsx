@@ -12,6 +12,7 @@ import { formatMoney } from "@/lib/format";
 import { toast } from "sonner";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { DryingChoice, DryingStatusValue } from "@/components/drying-choice";
 
 type PO = {
   id: string;
@@ -46,6 +47,9 @@ export default function PurchaseOrderPage() {
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [recvQty, setRecvQty] = useState("");
+  const [recvDrying, setRecvDrying] = useState<DryingStatusValue>("needs_drying");
+  const [recvLocationId, setRecvLocationId] = useState("");
+  const [locs, setLocs] = useState<{ id: string; name: string; kind?: string }[]>([]);
   const [printPath, setPrintPath] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +71,13 @@ export default function PurchaseOrderPage() {
   }
   useEffect(() => {
     load();
+    api<{ id: string; name: string; kind?: string }[]>("/api/v1/filament/locations")
+      .then((rows) => {
+        setLocs(rows);
+        const sealed = rows.find((r) => r.kind === "sealed" || /sealed|shelf/i.test(r.name));
+        if (sealed) setRecvLocationId(sealed.id);
+      })
+      .catch(() => undefined);
   }, [params.id]);
 
   async function act(path: string, body?: unknown) {
@@ -179,7 +190,41 @@ export default function PurchaseOrderPage() {
               <Label>Quantity received now</Label>
               <Input className="h-12" value={recvQty} onChange={(e) => setRecvQty(e.target.value)} />
             </div>
-            <Button className="h-12 w-full" onClick={() => act(`/api/v1/purchasing/${po.id}/receive`, { quantity: Number(recvQty) })}>
+            <div className="space-y-1">
+              <Label>Storage location</Label>
+              <select
+                className="h-12 w-full rounded-lg border border-input bg-transparent px-3"
+                value={recvLocationId}
+                onChange={(e) => setRecvLocationId(e.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {locs.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <DryingChoice
+              value={recvDrying}
+              onChange={(next) => {
+                setRecvDrying(next);
+                if (next === "drying") {
+                  const dryer = locs.find((r) => r.kind === "dryer" || /dryer/i.test(r.name));
+                  if (dryer) setRecvLocationId(dryer.id);
+                }
+              }}
+            />
+            <Button
+              className="h-12 w-full"
+              onClick={() =>
+                act(`/api/v1/purchasing/${po.id}/receive`, {
+                  quantity: Number(recvQty),
+                  location_id: recvLocationId || null,
+                  drying_status: recvDrying,
+                })
+              }
+            >
               Receive {recvQty} spools
             </Button>
             {printPath && (
