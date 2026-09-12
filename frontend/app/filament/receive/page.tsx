@@ -40,7 +40,8 @@ function ReceiveInner() {
       <FilamentNav />
       <h2 className="text-xl font-semibold">Scan a filament profile</h2>
       <p className="text-sm text-muted-foreground">
-        Scan the reusable FILT- barcode. FarmOS opens that saved profile so you only enter how many rolls arrived.
+        Connect a USB or Bluetooth scanner to this PC, focus the field, and scan the reusable FILT- barcode. On a phone,
+        use the camera. FarmOS opens that saved profile so you only enter how many rolls arrived.
       </p>
       <BarcodeScanner onDetect={identify} />
     </div>

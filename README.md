@@ -210,7 +210,7 @@ Each spool keeps the purchase price paid when it arrived, even if the profile’
 
 Purchase orders can be received from the PO itself without scanning, including the same drying choice. Reorder modes: Off, Suggest only, **Create purchase order** (default), Approve and order, Full auto (architected, **disabled** unless spending controls explicitly enable it). Available stock = physical − committed (queue, current prints, production runs, waiting orders).
 
-The shop-floor UI is phone-first: a bottom bar for Scan, Queue, Printers, QC, and Filament, plus a hamburger for the rest. Add FarmOS to the home screen as a PWA. Phone **SCAN** uses the camera (QR and Code 128) with manual entry as fallback. Scanning a profile barcode opens **Add New Rolls**.
+The shop-floor UI is phone-first: a bottom bar for Scan, Queue, Printers, QC, and Filament, plus a hamburger for the rest. Add FarmOS to the home screen as a PWA. **SCAN** accepts a USB or Bluetooth barcode scanner plugged into the PC (HID keyboard wedge: it types the code and sends Enter), the phone camera (QR and Code 128), or manual entry. While you are logged in, scanning from anywhere in the app looks up FarmOS codes and opens the record. Dedicated scan fields on Scan / receive pages take the typed code so lookups are not fired twice. Scanning a profile barcode opens **Add New Rolls**.
 
 ## Backups
 

@@ -37,10 +37,12 @@ function patchStop(Ctor: { prototype: { stop: () => Promise<void> } }) {
 
 export function BarcodeScanner({
   onDetect,
-  label = "Point the camera at a FarmOS QR or Code 128 label",
+  label = "USB and Bluetooth scanners work as a keyboard: click or focus the field below and pull the trigger. Codes submit on Enter. Camera (QR and Code 128) is optional, and you can type a code and press Go.",
+  autoFocus = true,
 }: {
   onDetect: (code: string) => void;
   label?: string;
+  autoFocus?: boolean;
 }) {
   const uid = useId().replace(/:/g, "");
   const elementId = `farmos-scanner-${uid}`;
@@ -119,19 +121,31 @@ export function BarcodeScanner({
         className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (manual.trim()) onDetect(manual.trim());
+          const value = manual.trim();
+          if (!value) return;
+          onDetect(value);
+          setManual("");
         }}
       >
         <Input
           value={manual}
           onChange={(e) => setManual(e.target.value)}
-          placeholder="Or type FILT-… or SPOOL-…"
+          placeholder="Scan or type FILT-… or SPOOL-…"
           className="h-12 text-base"
+          autoFocus={autoFocus}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-farmos-scan="1"
         />
         <Button type="submit" className="h-12 px-5">
           Go
         </Button>
       </form>
+      <p className="text-xs text-zinc-500">
+        Plug in a USB or Bluetooth HID scanner, focus this field, and scan. The camera button is for phones.
+      </p>
     </div>
   );
 }

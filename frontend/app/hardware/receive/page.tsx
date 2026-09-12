@@ -40,7 +40,8 @@ function ReceiveInner() {
       <HardwareNav />
       <h2 className="text-xl font-semibold">Scan a hardware SKU</h2>
       <p className="text-sm text-muted-foreground">
-        Scan the reusable HW- barcode. FarmOS opens that SKU so you only enter how many pieces arrived.
+        Connect a USB or Bluetooth scanner to this PC, focus the field, and scan the reusable HW- barcode. On a phone,
+        use the camera. FarmOS opens that SKU so you only enter how many pieces arrived.
       </p>
       <BarcodeScanner onDetect={identify} />
     </div>

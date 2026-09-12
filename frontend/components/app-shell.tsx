@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { api, getToken, setToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { HidScanListener } from "@/components/hid-scan-listener";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -128,6 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh bg-background">
+      <HidScanListener />
       <aside className="hidden w-60 shrink-0 border-r border-white/5 bg-[#0b0f14] lg:flex lg:flex-col">
         <div className="flex items-center gap-2.5 px-4 py-5">
           <div className="flex size-9 items-center justify-center rounded-md bg-amber-500 text-sm font-bold text-zinc-950">

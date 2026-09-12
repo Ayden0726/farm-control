@@ -91,7 +91,9 @@ export default function ScanHubPage() {
     <div className="mx-auto max-w-lg space-y-4">
       <h2 className="text-2xl font-semibold">SCAN</h2>
       <p className="text-sm text-zinc-400">
-        Prefixes route automatically: PRINTER-, SPOOL-, FILT-, BIN-, ORDER-, BATCH-, KIT-, HW-.
+        Connect a USB or Bluetooth barcode scanner to this PC (HID keyboard mode), focus the field, and pull the trigger.
+        Codes submit on Enter. On a phone, use the camera. Prefixes route automatically: PRINTER-, SPOOL-, FILT-, BIN-,
+        ORDER-, BATCH-, KIT-, HW-.
       </p>
       <div className="grid gap-2">
         {ACTIONS.map((a) => (
