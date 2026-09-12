@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, AuthUser, setToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -18,39 +17,6 @@ export default function SetupPage() {
   const [company, setCompany] = useState("Print Farm");
   const [demo, setDemo] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [apiDown, setApiDown] = useState(false);
-  const [alreadyDone, setAlreadyDone] = useState(false);
-  const [waitedMs, setWaitedMs] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function check() {
-      try {
-        const r = await fetch("/api/v1/setup/status", {
-          cache: "no-store",
-          signal: AbortSignal.timeout(4000),
-        });
-        const data = await r.json().catch(() => null);
-        if (cancelled) return;
-        if (!r.ok) {
-          setApiDown(true);
-          return;
-        }
-        setApiDown(false);
-        if (data && data.needs_setup === false) setAlreadyDone(true);
-      } catch {
-        if (!cancelled) setApiDown(true);
-      }
-    }
-    check();
-    const poll = setInterval(check, 1500);
-    const tick = setInterval(() => setWaitedMs((ms) => ms + 1500), 1500);
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-      clearInterval(tick);
-    };
-  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -93,24 +59,6 @@ export default function SetupPage() {
           Create the admin account. Optionally load a simulated Flex Rack 5 farm so you can exercise
           the queue, bed-clear workflow, and dashboard before connecting OctoPrint or Moonraker.
         </p>
-        {apiDown && (
-          <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            Waiting for the farm API. The UI can appear first; the API usually comes up within a
-            minute after Postgres is healthy. This banner clears by itself — no refresh needed.
-            {waitedMs >= 120000
-              ? " Still down after two minutes — in WSL run: docker compose logs backend"
-              : ""}
-          </p>
-        )}
-        {alreadyDone && (
-          <p className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300">
-            An admin account already exists.{" "}
-            <Link href="/login" className="text-amber-300 hover:underline">
-              Sign in instead
-            </Link>
-            . To run the wizard again, reset the database with <code>./install.sh --reset</code>.
-          </p>
-        )}
         <div className="mt-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -151,8 +99,8 @@ export default function SetupPage() {
               orders.
             </span>
           </label>
-          <Button type="submit" className="w-full" disabled={busy || alreadyDone || apiDown}>
-            {apiDown ? "Waiting for API…" : busy ? "Creating farm…" : "Complete setup"}
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? "Creating farm…" : "Complete setup"}
           </Button>
         </div>
       </form>
