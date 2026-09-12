@@ -47,6 +47,12 @@ class FilenameGramsTests(unittest.TestCase):
         self.assertEqual(parse_time_from_filename(name), 2 * 3600 + 15 * 60)
         self.assertEqual(parse_quantity_from_filename(name), 4)
 
+    def test_combined_with_pcs_qty_and_time(self):
+        name = "RK-FR5-Handle-4pcs-2h15m-48g.gcode"
+        self.assertEqual(parse_filament_grams_from_filename(name), 48)
+        self.assertEqual(parse_time_from_filename(name), 2 * 3600 + 15 * 60)
+        self.assertEqual(parse_quantity_from_filename(name), 4)
+
     def test_uses_last_grams(self):
         self.assertEqual(parse_filament_grams_from_filename("12g-final-48g.gcode"), 48)
 

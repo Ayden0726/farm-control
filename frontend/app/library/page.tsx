@@ -149,9 +149,10 @@ export default function LibraryPage() {
           <h2 className="font-medium">Upload G-code</h2>
           <p className="text-xs text-zinc-500">
             Production uses G-code. Pack as many copies as you want in your slicer, then upload that file. If the name
-            has <span className="font-mono">x4</span>, <span className="font-mono">x8</span>, or any{" "}
-            <span className="font-mono">x</span>
-            +number, quantity is set to that many of this part on the plate. A print time in the name (
+            has <span className="font-mono">4pcs</span> (or <span className="font-mono">8pcs</span>,{" "}
+            <span className="font-mono">4 pcs</span>, and similar), quantity is set to that many of this part on the
+            plate. Names with <span className="font-mono">x4</span> or <span className="font-mono">x8</span> still
+            work. A print time in the name (
             <span className="font-mono">2h15m</span>, <span className="font-mono">45m</span>) or filament in grams (
             <span className="font-mono">48g</span>) is used when the file has no matching slicer comments.
           </p>

@@ -17,21 +17,37 @@ def new_qr_token() -> str:
     return secrets.token_urlsafe(12).replace("-", "").replace("_", "")[:16].lower()
 
 
-_QTY_IN_NAME = re.compile(r"(?:^|[\s._-])x(\d+)(?=$|[\s._-])", re.IGNORECASE)
+# Same outer bounds as filename time/grams tokens. A digit before "." is a
+# decimal (0.4mm), not a quantity boundary.
+_QTY_BOUND = r"[\s._\-()]"
+# Longer unit names first so "pieces" is not parsed as "pc" + leftover text.
+_QTY_PCS_UNITS = r"pieces|piece|pcs|pc"
+_QTY_PCS_IN_NAME = re.compile(
+    rf"(?:^|(?<!\d){_QTY_BOUND})(\d+)\s*[\-_]?\s*(?:{_QTY_PCS_UNITS})(?=$|{_QTY_BOUND})",
+    re.IGNORECASE,
+)
+_QTY_X_IN_NAME = re.compile(r"(?:^|[\s._-])x(\d+)(?=$|[\s._-])", re.IGNORECASE)
+
+
+def _cap_filename_qty(n: int) -> int:
+    return max(1, min(n, 999))
 
 
 def parse_quantity_from_filename(filename: str) -> int:
     """How many of one part this plate prints.
 
-    Reads x<number> in the file name, e.g. RK-FR5-Handle-x4.gcode,
-    Handle_x8.gcode, Bracket-x4-PETG.gcode, or x12-plate.gcode.
+    Prefers <number>pcs (Handle-4pcs.gcode, 4 pcs, 8-pcs, 4_pcs, (4pcs),
+    4piece/4pieces/4pc). Falls back to x<number> (RK-FR5-Handle-x4.gcode).
+    If both appear, pcs wins. Bounded so K1Max2 and 0.4mm are not quantities.
     """
     stem = Path(filename).stem
-    matches = list(_QTY_IN_NAME.finditer(stem))
-    if not matches:
+    pcs = list(_QTY_PCS_IN_NAME.finditer(stem))
+    if pcs:
+        return _cap_filename_qty(int(pcs[-1].group(1)))
+    xs = list(_QTY_X_IN_NAME.finditer(stem))
+    if not xs:
         return 1
-    n = int(matches[-1].group(1))
-    return max(1, min(n, 999))
+    return _cap_filename_qty(int(xs[-1].group(1)))
 
 
 def parse_time_from_filename(filename: str) -> int | None:
