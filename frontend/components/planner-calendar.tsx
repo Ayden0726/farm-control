@@ -74,6 +74,7 @@ export function formatLongDate(iso: string): string {
 
 export function hoursLabel(seconds: number): string {
   if (!seconds) return "0 h";
+  if (seconds < 360) return `${Math.max(1, Math.round(seconds / 60))} min`;
   const h = seconds / 3600;
   return h < 10 ? `${h.toFixed(1)} h` : `${Math.round(h)} h`;
 }
