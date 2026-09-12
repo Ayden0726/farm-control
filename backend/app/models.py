@@ -391,6 +391,7 @@ class ProductionRun(TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     batch_code: Mapped[str | None] = mapped_column(String(80), unique=True, index=True, nullable=True)
     product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id"), nullable=True)
+    needed_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -956,6 +957,7 @@ class ProductionPlan(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(40), default="draft", index=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    needed_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     production_run_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("production_runs.id"), nullable=True
     )

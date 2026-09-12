@@ -179,6 +179,7 @@ def run_out(run: ProductionRun, jobs: list[PrintJob] | None = None) -> Productio
         completed_jobs=counts["completed"],
         failed_jobs=counts["failed"],
         batch_code=getattr(run, "batch_code", None),
+        needed_by=getattr(run, "needed_by", None),
     )
 
 

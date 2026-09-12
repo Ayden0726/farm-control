@@ -507,13 +507,24 @@ async def assign_jobs(db: AsyncSession) -> None:
     ).scalars().all()
     if not printers:
         return
+    from app.services.schedule_plan import due_priority_key
+
     jobs = (
         await db.execute(
             select(PrintJob)
+            .options(selectinload(PrintJob.production_run))
             .where(PrintJob.status == JobStatus.queued)
             .order_by(PrintJob.queue_position.asc(), PrintJob.created_at.asc())
         )
     ).scalars().all()
+    jobs = sorted(
+        jobs,
+        key=lambda job: due_priority_key(
+            job.production_run.needed_by if job.production_run else None,
+            job.queue_position,
+            job.created_at,
+        ),
+    )
     used: set[UUID] = set()
     for job in jobs:
         for printer in printers:

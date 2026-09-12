@@ -16,6 +16,7 @@ from app.models import (
     ProductionRunStatus,
     utcnow,
 )
+from app.services.schedule_plan import queue_position_for_needed_by
 from app.util import jobs_needed, new_qr_token
 
 
@@ -44,7 +45,14 @@ async def enqueue_jobs_for_item(
     still_needed = max(0, item.required_qty - produced_or_queued)
     n = jobs_needed(still_needed, gcode.quantity_per_file)
     created: list[PrintJob] = []
-    pos = await next_queue_position(db)
+    run = None
+    if item.production_run_id:
+        run = await db.get(ProductionRun, item.production_run_id)
+    needed_by = getattr(run, "needed_by", None) if run else None
+    if n and needed_by is not None:
+        pos = await queue_position_for_needed_by(db, needed_by, n)
+    else:
+        pos = await next_queue_position(db)
     for _ in range(n):
         job = PrintJob(
             production_run_id=item.production_run_id,
@@ -62,10 +70,8 @@ async def enqueue_jobs_for_item(
         db.add(job)
         created.append(job)
         pos += 1
-    if item.production_run_id:
-        run = await db.get(ProductionRun, item.production_run_id)
-        if run and run.status == ProductionRunStatus.draft:
-            run.status = ProductionRunStatus.queued
+    if run and run.status == ProductionRunStatus.draft:
+        run.status = ProductionRunStatus.queued
     await db.flush()
     return created
 

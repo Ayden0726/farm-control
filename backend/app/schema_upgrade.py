@@ -100,6 +100,10 @@ TABLE_COLUMNS = {
     "production_runs": {
         "batch_code": "VARCHAR(80)",
         "product_id": "UUID",
+        "needed_by": "TIMESTAMPTZ",
+    },
+    "production_plans": {
+        "needed_by": "TIMESTAMPTZ",
     },
     "qc_batches": {
         "failure_reason": "VARCHAR(80) DEFAULT ''",

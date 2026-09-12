@@ -319,6 +319,7 @@ class ProductionRunIn(BaseModel):
     product_id: UUID | None = None
     product_qty: int = 1
     include_optional: bool = False
+    needed_by: str | None = None
 
 
 class ProductionItemOut(BaseModel):
@@ -351,6 +352,7 @@ class ProductionRunOut(BaseModel):
     completed_jobs: int = 0
     failed_jobs: int = 0
     batch_code: str | None = None
+    needed_by: datetime | None = None
 
 
 class JobOut(BaseModel):

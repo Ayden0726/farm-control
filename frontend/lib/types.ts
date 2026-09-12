@@ -117,6 +117,7 @@ export type ProductionRun = {
   completed_jobs: number;
   failed_jobs: number;
   batch_code?: string | null;
+  needed_by?: string | null;
 };
 
 export type Part = {

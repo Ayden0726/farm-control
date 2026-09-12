@@ -302,6 +302,7 @@ export default function ProductionPage() {
                   </Link>
                 </CardTitle>
                 <div className="text-xs text-zinc-500">
+                  {run.needed_by ? `Needed by ${run.needed_by.slice(0, 10)} · ` : ""}
                   {run.queued_jobs} queued · {run.printing_jobs} printing · {run.completed_jobs} complete
                 </div>
               </div>

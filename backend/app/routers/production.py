@@ -22,6 +22,7 @@ from app.schemas import ProductionProductIn, ProductionRunIn, ProductionRunOut
 from app.serialize import run_out
 from app.services.production_expand import run_items_for_product
 from app.services.queue import enqueue_jobs_for_item
+from app.services.schedule_plan import needed_by_utc
 
 router = APIRouter(prefix="/production-runs", tags=["production"])
 
@@ -114,6 +115,7 @@ async def create_run(
         name=payload.name,
         notes=payload.notes,
         status=ProductionRunStatus.queued if payload.start_immediately else ProductionRunStatus.draft,
+        needed_by=needed_by_utc(payload.needed_by),
     )
     db.add(run)
     await db.flush()

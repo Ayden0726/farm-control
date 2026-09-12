@@ -101,7 +101,10 @@ export default function ProductionDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-semibold">{run.batch_code ? `${run.batch_code} · ${run.name}` : run.name}</h2>
-          <p className="text-sm text-muted-foreground">{run.notes || "No notes"}</p>
+          <p className="text-sm text-muted-foreground">
+            {run.needed_by ? `Needed by ${run.needed_by.slice(0, 10)}` : "No needed-by date"}
+            {run.notes ? ` · ${run.notes}` : ""}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <StatusPill status={run.status} />

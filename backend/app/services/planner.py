@@ -203,14 +203,25 @@ async def recommend_printer(
     return best, [], start, end
 
 
-async def build_plan(db: AsyncSession, *, persist: bool = True, actor: str = "operator") -> ProductionPlan:
+async def build_plan(
+    db: AsyncSession,
+    *,
+    persist: bool = True,
+    actor: str = "operator",
+    needed_by: datetime | None = None,
+) -> ProductionPlan:
     demand = await demand_by_part(db)
     printers = (
         await db.execute(select(Printer).options(selectinload(Printer.assigned_spool)).order_by(Printer.name))
     ).scalars().all()
     load = {p.id: await _workload_seconds(db, p.id) for p in printers}
     now = utcnow()
-    plan = ProductionPlan(status="draft", notes="Generated from open orders, inventory, and queue", created_by=actor)
+    plan = ProductionPlan(
+        status="draft",
+        notes="Generated from open orders, inventory, and queue",
+        created_by=actor,
+        needed_by=needed_by,
+    )
     db.add(plan)
     await db.flush()
 
@@ -314,23 +325,30 @@ def plan_payload(plan: ProductionPlan) -> dict:
         "notes": plan.notes,
         "created_at": plan.created_at.isoformat() if plan.created_at else None,
         "committed_at": plan.committed_at.isoformat() if plan.committed_at else None,
+        "needed_by": plan.needed_by.date().isoformat() if plan.needed_by else None,
         "production_run_id": str(plan.production_run_id) if plan.production_run_id else None,
         "lines": lines,
     }
 
 
-async def commit_plan(db: AsyncSession, plan: ProductionPlan, actor: str = "operator") -> ProductionRun:
+async def commit_plan(
+    db: AsyncSession, plan: ProductionPlan, actor: str = "operator", needed_by: datetime | None = None
+) -> ProductionRun:
     included = [ln for ln in plan.lines if ln.included and ln.quantity > 0]
     if not included:
         raise ValueError("No included lines to commit")
     sku = included[0].part.sku if included[0].part else "GEN"
     batch = await next_batch_code(db, sku)
+    if needed_by is not None:
+        plan.needed_by = needed_by
+    due = plan.needed_by
     run = ProductionRun(
         name=f"Plan {batch}",
         status=ProductionRunStatus.queued,
         notes=f"Committed from production plan {plan.id}",
         batch_code=batch,
         started_at=utcnow(),
+        needed_by=due,
     )
     db.add(run)
     await db.flush()

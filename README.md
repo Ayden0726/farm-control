@@ -84,7 +84,7 @@ Printed parts go **Printed → Awaiting QC → Passed / Failed / Partial**. Only
 FarmOS plans production from open orders, BOMs, reserved inventory, the print queue, printer compatibility, filament, and maintenance status.
 
 1. A WooCommerce (or manual) order explodes the product BOM and **reserves** available finished parts. Available = physical − reserved.
-2. **Planner → Generate production plan** calculates true shortages and recommends compatible printers. Review and **Commit to print queue**.
+2. **Planner** shows a month/week calendar of needed-by dates. Pick a day, auto-select compatible printers, add G-code or explode a catalog product, then **Schedule** onto the queue. **Generate production plan** still calculates true shortages and recommends compatible printers; **Commit to print queue** keeps that needed-by date. Jobs enqueue now; earlier due dates print first among queued work.
 3. **Recommended next jobs** on the dashboard queues work by order age, stock shortages, compatibility, and filament.
 4. Prints complete into QC. Failed quantities become scrap and optional replacement jobs.
 5. Passed parts land in finished-part **bins**. Scan a `BIN-` QR to open the bin.
