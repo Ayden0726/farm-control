@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/status-pill";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type Note = {
   id: string;
@@ -63,6 +65,9 @@ export default function NotificationsPage() {
   const [history, setHistory] = useState<Delivery[] | null>(null);
   const [filter, setFilter] = useState<"all" | "sent" | "failed" | "skipped">("all");
   const [error, setError] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function loadInbox() {
     setRows(await api<Note[]>("/api/v1/notifications"));
@@ -112,15 +117,22 @@ export default function NotificationsPage() {
           Delivery history
         </Button>
         {tab === "inbox" && (
-          <Button
-            variant="outline"
-            onClick={async () => {
-              await api("/api/v1/notifications/read-all", { method: "POST" });
-              loadInbox();
-            }}
-          >
-            Mark all read
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await api("/api/v1/notifications/read-all", { method: "POST" });
+                loadInbox();
+              }}
+            >
+              Mark all read
+            </Button>
+            {rows && rows.length > 0 && (
+              <Button variant="destructive" onClick={() => setClearOpen(true)}>
+                Clear inbox
+              </Button>
+            )}
+          </>
         )}
       </div>
 
@@ -175,6 +187,25 @@ export default function NotificationsPage() {
                     Mark read
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={deletingId === n.id}
+                  onClick={async () => {
+                    setDeletingId(n.id);
+                    try {
+                      await api(`/api/v1/notifications/${n.id}`, { method: "DELETE" });
+                      toast.success("Notification deleted");
+                      await loadInbox();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not delete");
+                    } finally {
+                      setDeletingId(null);
+                    }
+                  }}
+                >
+                  {deletingId === n.id ? "Deleting…" : "Delete"}
+                </Button>
               </div>
             </div>
           );
@@ -245,6 +276,43 @@ export default function NotificationsPage() {
           )}
         </div>
       )}
+
+      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Clear the inbox?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-zinc-400">
+            This removes every farm event from the inbox and the matching phone delivery history. It does not change
+            printer, queue, or production data.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setClearOpen(false)} disabled={clearing}>
+              Keep them
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={clearing}
+              onClick={async () => {
+                setClearing(true);
+                try {
+                  const res = await api<{ count: number }>("/api/v1/notifications/clear", { method: "POST" });
+                  toast.success(res.count ? `Deleted ${res.count} notification${res.count === 1 ? "" : "s"}` : "Inbox was already empty");
+                  setClearOpen(false);
+                  await loadInbox();
+                  if (tab === "history") await loadHistory();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not clear inbox");
+                } finally {
+                  setClearing(false);
+                }
+              }}
+            >
+              {clearing ? "Clearing…" : "Delete all"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

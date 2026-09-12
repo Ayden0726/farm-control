@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -169,6 +169,14 @@ async def read_all(db: AsyncSession = Depends(get_db), _: User = Depends(get_cur
     return {"ok": True, "count": len(rows)}
 
 
+@router.post("/clear")
+async def clear_notifications(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    count = (await db.execute(select(func.count()).select_from(Notification))).scalar_one()
+    await db.execute(delete(Notification))
+    await db.commit()
+    return {"ok": True, "count": int(count or 0)}
+
+
 @router.post("/{notification_id}/read")
 async def mark_read(
     notification_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
@@ -179,6 +187,18 @@ async def mark_read(
     row.is_read = True
     await db.commit()
     return {"ok": True}
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(
+    notification_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    row = await db.get(Notification, notification_id)
+    if not row:
+        raise HTTPException(404, "Notification not found")
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True, "deleted": True}
 
 
 @router.get("/events")
