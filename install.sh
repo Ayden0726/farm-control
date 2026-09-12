@@ -255,7 +255,11 @@ echo
 if [[ "$ready" -eq 1 ]]; then
   echo "Print FarmOS is running."
 else
-  echo "Containers are starting, but the UI is not answering yet. Check: docker compose logs -f"
+  echo "Containers are starting, but the UI is not answering yet."
+  echo "Recent backend logs:"
+  compose logs backend --tail 80 || true
+  echo
+  echo "Check live logs with: docker compose logs -f"
 fi
 echo
 echo "  Open:  ${HOST_URL}"
