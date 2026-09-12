@@ -22,7 +22,7 @@ class PushMessage:
     event: str
     severity: str = "info"
     click_url: str | None = None
-    click_label: str = "Open RackKit FarmOS"
+    click_label: str = "Open Print FarmOS"
     tags: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -117,7 +117,7 @@ class DiscordProvider(PushProvider):
     async def send(self, message: PushMessage, public: dict[str, Any], secrets: dict[str, Any]) -> None:
         color = 0xE8A54B if message.severity != "error" else 0xF07167
         payload = {
-            "username": "RackKit FarmOS",
+            "username": "Print FarmOS",
             "embeds": [
                 {
                     "title": message.title,

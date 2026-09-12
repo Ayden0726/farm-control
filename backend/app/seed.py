@@ -41,7 +41,7 @@ from app.util import new_qr_token, parse_quantity_from_filename
 
 
 def _gcode_content(name: str, seconds: int, grams: float) -> str:
-    return f"""; RackKit FarmOS library file
+    return f"""; Print FarmOS library file
 ;TIME:{seconds}
 ; filament used [g] = {grams}
 ; part={name}
@@ -109,7 +109,7 @@ async def seed_demo(db: AsyncSession) -> None:
     product = Product(
         sku="RK-FR5",
         name="RackKit Flex Rack 5",
-        description="Complete Flex Rack 5. BOM is data-driven — add future RackKit products from the Products page.",
+        description="Complete Flex Rack 5. BOM is data-driven — add future products from the Products page.",
         woocommerce_product_id=None,
     )
     db.add(product)

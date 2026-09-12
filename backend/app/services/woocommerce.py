@@ -86,7 +86,7 @@ async def import_woocommerce_payload(db: AsyncSession, payload: dict[str, Any]) 
     await db.flush()
     await db.refresh(order, attribute_names=["lines", "part_needs"])
     if not order.lines:
-        order.notes = (order.notes + "\nNo matching RackKit products found on this WooCommerce order.").strip()
+        order.notes = (order.notes + "\nNo matching products found on this WooCommerce order.").strip()
         return order
     await apply_inventory_to_order(db, order)
     printers = (

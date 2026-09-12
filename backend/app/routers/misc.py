@@ -247,7 +247,7 @@ async def get_settings_api(db: AsyncSession = Depends(get_db), _: User = Depends
     settings = get_settings()
     company = await db.get(AppSetting, "company_name")
     return SettingsOut(
-        company_name=(company.value if company else "RackKit"),
+        company_name=(company.value if company else "Print Farm"),
         woocommerce_url=settings.woocommerce_url,
         woocommerce_configured=woocommerce_configured(),
         notify_webhook_configured=bool(settings.notify_webhook_url),
@@ -284,7 +284,7 @@ async def put_settings(
     settings = get_settings()
     company = await db.get(AppSetting, "company_name")
     return SettingsOut(
-        company_name=(company.value if company else "RackKit"),
+        company_name=(company.value if company else "Print Farm"),
         woocommerce_url=settings.woocommerce_url,
         woocommerce_configured=woocommerce_configured(),
         notify_webhook_configured=bool(settings.notify_webhook_url),

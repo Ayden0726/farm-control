@@ -14,7 +14,7 @@ export default function SetupPage() {
   const [email, setEmail] = useState("ops@rackkit.local");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("Farm Admin");
-  const [company, setCompany] = useState("RackKit");
+  const [company, setCompany] = useState("Print Farm");
   const [demo, setDemo] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +33,7 @@ export default function SetupPage() {
         }),
       });
       setToken(res.access_token);
-      toast.success(demo ? "FarmOS is ready with demo farm data." : "FarmOS is ready.");
+      toast.success(demo ? "Print FarmOS is ready with demo farm data." : "Print FarmOS is ready.");
       router.replace("/");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Setup failed");
@@ -49,7 +49,7 @@ export default function SetupPage() {
         className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#121820]/90 p-8 shadow-2xl"
       >
         <div className="mb-2 text-[11px] uppercase tracking-[0.2em] text-amber-400">First-run setup</div>
-        <h1 className="text-2xl font-semibold">Stand up RackKit FarmOS</h1>
+        <h1 className="text-2xl font-semibold">Stand up Print FarmOS</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Create the admin account. Optionally load a simulated Flex Rack 5 farm so you can exercise
           the queue, bed-clear workflow, and dashboard before connecting OctoPrint or Moonraker.

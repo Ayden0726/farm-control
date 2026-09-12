@@ -1,6 +1,6 @@
-# RackKit FarmOS
+# Print FarmOS
 
-Self-hosted production control for the RackKit 3D-printing farm. FarmOS is built around a **print queue**, not hobby printer monitoring: production jobs, G-code reuse, bed-clear confirmation, QC, finished-part inventory, filament costing, BOMs, and WooCommerce orders.
+Self-hosted production control for a 3D-printing farm. Print FarmOS is built around a **print queue**, not hobby printer monitoring: production jobs, G-code reuse, bed-clear confirmation, QC, finished-part inventory, filament costing, BOMs, and WooCommerce orders.
 
 ## Stack
 
@@ -13,8 +13,8 @@ Self-hosted production control for the RackKit 3D-printing farm. FarmOS is built
 ## Fresh install
 
 ```bash
-git clone <this-repo> rackkit-farmos
-cd rackkit-farmos
+git clone <this-repo> print-farmos
+cd print-farmos
 cp .env.example .env
 # set SECRET_KEY to a long random string
 docker compose up -d
@@ -104,7 +104,7 @@ Status: Waiting for Bed Clear
 Duration: 42m 0s
 Completed: 2026-09-10 21:04 UTC
 
-Open RackKit FarmOS to clear the bed and start the next queued job.
+Open Print FarmOS to clear the bed and start the next queued job.
 ```
 
 The notification includes a button/link into that printer so the operator can confirm bed clear. Delivery history (time, event, printer, job, provider, sent/failed) lives under **Notifications**. Failed sends are logged there instead of being dropped.
@@ -163,4 +163,4 @@ API_INTERNAL_URL=http://127.0.0.1:8472 npm run dev
 
 ## License
 
-Private / internal RackKit tooling unless you add a license file.
+Private / internal print-farm tooling unless you add a license file.

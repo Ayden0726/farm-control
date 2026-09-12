@@ -45,10 +45,10 @@ function LoginForm() {
       >
         <div className="mb-6 flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-lg bg-amber-500 text-lg font-bold text-zinc-950">
-            RK
+            PF
           </div>
           <div>
-            <h1 className="text-xl font-semibold">RackKit FarmOS</h1>
+            <h1 className="text-xl font-semibold">Print FarmOS</h1>
             <p className="text-sm text-muted-foreground">Sign in to the print farm</p>
           </div>
         </div>

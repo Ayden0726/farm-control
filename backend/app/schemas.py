@@ -24,7 +24,7 @@ class SetupIn(BaseModel):
     email: str
     password: str = Field(min_length=8)
     full_name: str = "Farm Admin"
-    company_name: str = "RackKit"
+    company_name: str = "Print Farm"
     load_demo: bool = True
 
 

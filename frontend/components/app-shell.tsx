@@ -107,10 +107,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-60 shrink-0 border-r border-white/5 bg-[#0b0f14] lg:flex lg:flex-col">
         <div className="flex items-center gap-2.5 px-4 py-5">
           <div className="flex size-9 items-center justify-center rounded-md bg-amber-500 text-sm font-bold text-zinc-950">
-            RK
+            PF
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-wide text-zinc-100">RackKit FarmOS</div>
+            <div className="text-sm font-semibold tracking-wide text-zinc-100">Print FarmOS</div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Print farm control</div>
           </div>
         </div>
@@ -128,7 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Menu className="size-4" />
               </SheetTrigger>
               <SheetContent side="left" className="w-64 bg-[#0b0f14] p-0">
-                <div className="px-4 py-5 text-sm font-semibold">RackKit FarmOS</div>
+                <div className="px-4 py-5 text-sm font-semibold">Print FarmOS</div>
                 <NavList onClick={() => setOpen(false)} />
               </SheetContent>
             </Sheet>

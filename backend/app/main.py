@@ -92,9 +92,9 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
-        title="RackKit FarmOS",
+        title="Print FarmOS",
         version="1.0.0",
-        description="Self-hosted production control for the RackKit 3D-printing farm.",
+        description="Self-hosted production control for the print farm.",
         lifespan=lifespan,
     )
     application.add_middleware(
@@ -137,7 +137,7 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     async def health():
-        return {"status": "ok", "app": "RackKit FarmOS"}
+        return {"status": "ok", "app": "Print FarmOS"}
 
     return application
 

@@ -160,7 +160,7 @@ async def label_sheet(
         raise HTTPException(400, "Unknown label kind")
     await db.commit()
     html = label_html_page(
-        "RackKit FarmOS labels",
+        "Print FarmOS labels",
         cards,
         width_mm=payload.width_mm,
         height_mm=payload.height_mm,

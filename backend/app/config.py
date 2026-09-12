@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    app_name: str = "RackKit FarmOS"
+    app_name: str = "Print FarmOS"
     secret_key: str = "change-me-in-production-use-a-long-random-string"
     jwt_expire_minutes: int = 60 * 24 * 7
     database_url: str = "postgresql+asyncpg://farmos:farmos@127.0.0.1:5432/farmos"

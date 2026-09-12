@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostgreSQL backup for RackKit FarmOS. Run from the host or inside the db container.
+# PostgreSQL backup for Print FarmOS. Run from the host or inside the db container.
 set -euo pipefail
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 OUT=${1:-"./backups/farmos-$STAMP.sql.gz"}

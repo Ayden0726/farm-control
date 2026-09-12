@@ -59,7 +59,7 @@ export default function ProductsPage() {
           bom: bom.filter((b) => b.part_id),
         }),
       });
-      toast.success("Product saved. Future RackKit SKUs can be added here without code changes.");
+      toast.success("Product saved. Future SKUs can be added here without code changes.");
       setOpen(false);
       load();
     } catch (err) {

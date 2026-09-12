@@ -17,11 +17,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RackKit FarmOS",
-  description: "Production control for the RackKit 3D-printing farm.",
-  applicationName: "RackKit FarmOS",
+  title: "Print FarmOS",
+  description: "Production control for the print farm.",
+  applicationName: "Print FarmOS",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "FarmOS" },
+  appleWebApp: { capable: true, title: "Print FarmOS" },
 };
 
 export const viewport = {

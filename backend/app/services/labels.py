@@ -57,7 +57,7 @@ def label_html_page(
         items.append(
             f"""
             <article class="label">
-              <div class="brand">RackKit FarmOS</div>
+              <div class="brand">Print FarmOS</div>
               <div class="title">{card.get("title", "")}</div>
               {lines}
               <div class="code">{card["code"]}</div>

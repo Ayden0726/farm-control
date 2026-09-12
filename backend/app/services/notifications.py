@@ -201,7 +201,7 @@ def click_label_for(ntype: NotificationType) -> str:
         return "Open order"
     if ntype == NotificationType.filament_reorder:
         return "Review Order"
-    return "Open RackKit FarmOS"
+    return "Open Print FarmOS"
 
 
 async def ensure_defaults(db: AsyncSession) -> None:
@@ -456,6 +456,6 @@ def print_complete_copy(
         f"Status: Waiting for Bed Clear\n"
         f"Duration: {format_duration(duration_seconds)}\n"
         f"Completed: {when}\n\n"
-        "Open RackKit FarmOS to clear the bed and start the next queued job."
+        "Open Print FarmOS to clear the bed and start the next queued job."
     )
     return title, body
