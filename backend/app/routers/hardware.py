@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -11,8 +12,10 @@ from app.models import HardwareItem, HardwareMovement, User
 from app.services.barcodes import unique_public_code
 from app.services.hardware import (
     adjust_hardware,
+    delete_hardware,
     hardware_public_code,
     item_out,
+    receive_hardware,
     run_hardware_reorder_pass,
 )
 
@@ -31,7 +34,7 @@ class HardwareIn(BaseModel):
     min_stock: float = 0
     target_stock: float = 0
     storage_location: str = ""
-    reorder_mode: str = "create_purchase_order"
+    reorder_mode: str = "off"
     approval_required: bool = True
     barcode: str = ""
     notes: str = ""
@@ -41,6 +44,13 @@ class HardwareIn(BaseModel):
 class HardwareAdjust(BaseModel):
     quantity: float
     reason: str = "adjust"
+    notes: str = ""
+
+
+class HardwareReceive(BaseModel):
+    quantity_pcs: float = Field(ge=1)
+    unit_cost: float | None = None
+    storage_location: str | None = None
     notes: str = ""
 
 
@@ -64,11 +74,19 @@ async def create_hardware(
     if (await db.execute(select(HardwareItem).where(HardwareItem.sku == payload.sku))).scalar_one_or_none():
         raise HTTPException(400, "SKU already exists")
     item = HardwareItem(**payload.model_dump())
+    if item.quantity_on_hand:
+        # Stock is added through receive so the movement log matches filament rolls.
+        opening = item.quantity_on_hand
+        item.quantity_on_hand = 0
+    else:
+        opening = 0
     db.add(item)
     await db.flush()
     item.public_code = await unique_public_code(
         db, HardwareItem, "public_code", hardware_public_code(item.sku)
     )
+    if opening:
+        await receive_hardware(db, item.id, opening, notes="opening stock", actor=user.email)
     await db.commit()
     await db.refresh(item)
     return item_out(item)
@@ -112,11 +130,59 @@ async def update_hardware(
     item = await db.get(HardwareItem, item_id)
     if not item:
         raise HTTPException(404, "Not found")
-    for k, v in payload.model_dump().items():
+    data = payload.model_dump()
+    data.pop("quantity_on_hand", None)
+    for k, v in data.items():
         setattr(item, k, v)
     await db.commit()
     await db.refresh(item)
     return item_out(item)
+
+
+@router.post("/{item_id}/receive")
+async def receive(
+    item_id: UUID,
+    payload: HardwareReceive,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_perm("inventory")),
+):
+    try:
+        item = await receive_hardware(
+            db,
+            item_id,
+            payload.quantity_pcs,
+            unit_cost=payload.unit_cost,
+            storage_location=payload.storage_location,
+            notes=payload.notes,
+            actor=user.email,
+        )
+    except ValueError as exc:
+        raise HTTPException(400 if "pcs" in str(exc).lower() or "least" in str(exc).lower() else 404, str(exc)) from exc
+    await db.commit()
+    return item_out(item)
+
+
+@router.delete("/{item_id}")
+async def remove_hardware(
+    item_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(require_perm("inventory"))
+):
+    item = await db.get(HardwareItem, item_id)
+    if not item:
+        raise HTTPException(404, "Hardware item not found")
+    sku = item.sku
+    name = item.name
+    try:
+        await delete_hardware(db, item)
+        await db.commit()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            400,
+            f"Cannot delete {sku}: it is still referenced by farm records.",
+        ) from exc
+    return {"ok": True, "deleted": True, "sku": sku, "name": name}
 
 
 @router.post("/{item_id}/adjust")

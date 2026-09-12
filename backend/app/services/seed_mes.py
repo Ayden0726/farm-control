@@ -38,7 +38,6 @@ async def ensure_mes_defaults(db: AsyncSession) -> None:
 
     await ensure_default_rules(db)
     await _backfill_order_codes(db)
-    await _ensure_demo_hardware(db)
     await db.flush()
 
 

@@ -93,7 +93,7 @@ FarmOS plans production from open orders, BOMs, reserved inventory, the print qu
 7. **Packing station** confirms every line (or override, which is audited) then **Ready to ship**. Scan an `ORDER-` QR to open packing.
 8. Record carrier + tracking. WooCommerce is updated when that integration is configured.
 
-Hardware, packaging, and consumables share the filament purchase-order approval modes. Costing uses filament price, optional electricity ($/kWh × printer watts × hours), failure allowance, machine time, and hardware. Compatibility checks (nozzle, material, bed) block automatic assignment unless an administrator overrides.
+Hardware, packaging, and consumables are added as you buy them: **Hardware → New hardware SKU**, then **Add pcs** when a box arrives (pieces, not grams). Delete a SKU from the list or the profile. FarmOS does not preload a fastener catalog. Reorder modes match filament (off by default on new SKUs). Costing uses filament price, optional electricity ($/kWh × printer watts × hours), failure allowance, machine time, and hardware. Compatibility checks (nozzle, material, bed) block automatic assignment unless an administrator overrides.
 
 Global **SCAN** routes `PRINTER-`, `SPOOL-`, `FILT-`, `BIN-`, `ORDER-`, `BATCH-`, `KIT-`, and `HW-` codes. Search covers the same objects from desktop.
 

@@ -25,6 +25,29 @@ def hardware_public_code(sku: str) -> str:
     return f"HW-{slug}"
 
 
+async def receive_hardware(
+    db: AsyncSession,
+    item_id: UUID,
+    quantity_pcs: float,
+    unit_cost: float | None = None,
+    storage_location: str | None = None,
+    notes: str = "",
+    actor: str = "operator",
+) -> HardwareItem:
+    pcs = max(0.0, float(quantity_pcs or 0))
+    if pcs <= 0:
+        raise ValueError("Quantity received must be at least 1 pcs")
+    item = await db.get(HardwareItem, item_id)
+    if not item:
+        raise ValueError("Hardware item not found")
+    if unit_cost is not None and unit_cost >= 0:
+        item.unit_cost = unit_cost
+        item.purchase_cost = unit_cost
+    if storage_location is not None:
+        item.storage_location = storage_location
+    return await adjust_hardware(db, item.id, pcs, "receive", notes, actor)
+
+
 async def adjust_hardware(
     db: AsyncSession,
     item_id: UUID,
@@ -207,3 +230,42 @@ def item_out(item: HardwareItem) -> dict:
         "is_active": item.is_active,
         "low": item.quantity_available < (item.min_stock or 0),
     }
+
+
+async def delete_hardware(db: AsyncSession, item: HardwareItem) -> None:
+    from sqlalchemy import delete, func, update
+
+    from app.models import AssemblyKitLine, BomHardwareItem
+
+    sku = item.sku
+    bom_count = (
+        await db.execute(
+            select(func.count()).select_from(BomHardwareItem).where(BomHardwareItem.hardware_item_id == item.id)
+        )
+    ).scalar_one()
+    if bom_count:
+        raise ValueError(
+            f"Cannot delete {sku}: it is on {int(bom_count)} product BOM line(s). "
+            "Remove it from Products / BOM first."
+        )
+    kit_count = (
+        await db.execute(
+            select(func.count()).select_from(AssemblyKitLine).where(AssemblyKitLine.hardware_item_id == item.id)
+        )
+    ).scalar_one()
+    if kit_count:
+        raise ValueError(
+            f"Cannot delete {sku}: {int(kit_count)} assembly kit line(s) still reference it."
+        )
+    open_po = await existing_open_po_for_hardware(db, item.id)
+    if open_po:
+        raise ValueError(
+            f"Cannot delete {sku}: open purchase order {open_po.reference} still has this item."
+        )
+    await db.execute(
+        update(PurchaseOrderLine)
+        .where(PurchaseOrderLine.hardware_item_id == item.id)
+        .values(hardware_item_id=None)
+    )
+    await db.execute(delete(HardwareMovement).where(HardwareMovement.hardware_item_id == item.id))
+    await db.delete(item)

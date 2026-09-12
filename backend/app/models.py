@@ -912,7 +912,7 @@ class HardwareItem(TimestampMixin, Base):
     min_stock: Mapped[float] = mapped_column(Float, default=0)
     target_stock: Mapped[float] = mapped_column(Float, default=0)
     storage_location: Mapped[str] = mapped_column(String(255), default="")
-    reorder_mode: Mapped[str] = mapped_column(String(40), default="create_purchase_order")
+    reorder_mode: Mapped[str] = mapped_column(String(40), default="off")
     approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
     public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
     barcode: Mapped[str] = mapped_column(String(80), default="")

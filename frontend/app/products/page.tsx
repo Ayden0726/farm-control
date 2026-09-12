@@ -228,7 +228,7 @@ export default function ProductsPage() {
                   <span>
                     HW {b.sku} {b.is_optional ? "(optional)" : ""}
                   </span>
-                  <span className="font-mono">×{b.quantity}</span>
+                  <span className="font-mono">{b.quantity} pcs</span>
                 </div>
               ))}
               <div className="flex flex-wrap gap-2 pt-2">
@@ -336,7 +336,7 @@ export default function ProductsPage() {
             >
               Add BOM line
             </Button>
-            <p className="text-xs text-zinc-500">Hardware / packaging</p>
+            <p className="text-xs text-zinc-500">Hardware / packaging — add lines yourself, counted in pcs</p>
             {hwBom.map((row, idx) => (
               <div key={`hw-${idx}`} className="grid grid-cols-[1fr_70px_auto] gap-2">
                 <select
@@ -355,10 +355,12 @@ export default function ProductsPage() {
                 </select>
                 <Input
                   type="number"
+                  min={0}
                   value={row.quantity}
                   onChange={(e) =>
                     setHwBom((c) => c.map((x, i) => (i === idx ? { ...x, quantity: Number(e.target.value) } : x)))
                   }
+                  aria-label="Hardware quantity in pcs"
                 />
                 <Button type="button" size="sm" variant="ghost" onClick={() => setHwBom((c) => c.filter((_, i) => i !== idx))}>
                   Remove

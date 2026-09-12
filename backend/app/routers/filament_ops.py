@@ -760,7 +760,7 @@ def _identify_payload(hit: dict[str, Any]) -> dict[str, Any]:
             "id": str(row.id),
             "name": row.name,
             "public_code": getattr(row, "public_code", None),
-            "path": "/hardware",
+            "path": f"/hardware/{row.id}?add=1",
             "actions": [],
         }
     raise HTTPException(404, "Unknown FarmOS code")

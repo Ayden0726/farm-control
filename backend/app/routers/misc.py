@@ -386,5 +386,5 @@ async def resolve_scan(kind: str, token: str, db: AsyncSession = Depends(get_db)
     if found == "kit":
         return {"kind": "kit", "id": str(row.id), "name": row.public_code, "path": f"/kits/{row.id}"}
     if found == "hardware":
-        return {"kind": "hardware", "id": str(row.id), "name": row.name, "path": "/hardware"}
+        return {"kind": "hardware", "id": str(row.id), "name": row.name, "path": f"/hardware/{row.id}?add=1"}
     raise HTTPException(404, "Unknown QR kind")
