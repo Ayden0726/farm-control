@@ -35,6 +35,7 @@ class FilenameQuantityTests(unittest.TestCase):
     def test_does_not_match_nozzle_0_4(self):
         self.assertEqual(parse_quantity_from_filename("Handle-0.4mm.gcode"), 1)
         self.assertEqual(parse_quantity_from_filename("Handle-0.4.gcode"), 1)
+        self.assertEqual(parse_quantity_from_filename("Handle-0.4pcs.gcode"), 1)
 
     def test_uses_last_x_count(self):
         self.assertEqual(parse_quantity_from_filename("Kit-x2-final-x10.gcode"), 10)

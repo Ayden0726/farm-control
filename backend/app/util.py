@@ -17,13 +17,14 @@ def new_qr_token() -> str:
     return secrets.token_urlsafe(12).replace("-", "").replace("_", "")[:16].lower()
 
 
-# Same outer bounds as filename time/grams tokens. A digit before "." is a
-# decimal (0.4mm), not a quantity boundary.
+# Same outer bounds as filename time/grams tokens. "." is a bound only when it
+# is not a decimal point (so 0.4mm / 0.4pcs are not quantities, but x8-4pcs is).
 _QTY_BOUND = r"[\s._\-()]"
+_QTY_BOUND_START = r"[\s_\-()]"
 # Longer unit names first so "pieces" is not parsed as "pc" + leftover text.
 _QTY_PCS_UNITS = r"pieces|piece|pcs|pc"
 _QTY_PCS_IN_NAME = re.compile(
-    rf"(?:^|(?<!\d){_QTY_BOUND})(\d+)\s*[\-_]?\s*(?:{_QTY_PCS_UNITS})(?=$|{_QTY_BOUND})",
+    rf"(?:^|{_QTY_BOUND_START}|(?<!\d)\.)(\d+)\s*[\-_]?\s*(?:{_QTY_PCS_UNITS})(?=$|{_QTY_BOUND})",
     re.IGNORECASE,
 )
 _QTY_X_IN_NAME = re.compile(r"(?:^|[\s._-])x(\d+)(?=$|[\s._-])", re.IGNORECASE)

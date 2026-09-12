@@ -3,7 +3,7 @@ export function parseQuantityFromFilename(filename: string): number {
   const stem = filename.replace(/\.[^.]+$/, "");
   const pcs = [
     ...stem.matchAll(
-      /(?:^|(?<!\d)[\s._\-()])(\d+)\s*[-_]?\s*(?:pieces|piece|pcs|pc)(?=$|[\s._\-()])/gi,
+      /(?:^|[\s_\-()]|(?<!\d)\.)(\d+)\s*[-_]?\s*(?:pieces|piece|pcs|pc)(?=$|[\s._\-()])/gi,
     ),
   ];
   if (pcs.length) return capFilenameQty(Number.parseInt(pcs[pcs.length - 1][1], 10));
