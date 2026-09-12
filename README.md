@@ -12,21 +12,37 @@ Self-hosted production control for a 3D-printing farm. Print FarmOS is built aro
 
 ## Fresh install
 
+On a Linux server or WSL:
+
 ```bash
-git clone <this-repo> print-farmos
-cd print-farmos
-cp .env.example .env
-# set SECRET_KEY to a long random string
-docker compose up -d
+git clone https://github.com/Ayden0726/farm-control.git
+cd farm-control
+./install.sh
 ```
 
-Open http://localhost:3000
+On Windows with Docker Desktop:
+
+```powershell
+git clone https://github.com/Ayden0726/farm-control.git
+cd farm-control
+.\install.ps1
+```
+
+The GitHub repo is private, so Git will ask you to sign in. Use a [personal access token](https://github.com/settings/tokens) as the password (`repo` scope).
+
+The script installs Docker if needed (Linux), writes `.env` with random secrets, and starts the stack. Open the URL it prints (usually `http://YOUR_SERVER_IP:3000`).
 
 1. Complete the first-run setup wizard (admin account).
-2. Load demo data if you want a simulated Flex Rack 5 farm immediately.
+2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm.
 3. Add real printers (OctoPrint, Moonraker/Klipper, Creality K1/K2) when ready.
 
-The API is on http://localhost:8000 (`/docs` for OpenAPI).
+If phones or other PCs will use a specific address:
+
+```bash
+./install.sh --host http://192.168.1.50:3000
+```
+
+The API is on port 8000 (`/docs` for OpenAPI).
 
 ## What the queue does
 
@@ -70,7 +86,15 @@ Imported orders explode the product BOM, reserve finished parts, and queue produ
 
 ## Environment
 
-See `.env.example`. Important keys:
+`./install.sh` fills the required keys. To configure by hand instead:
+
+```bash
+cp .env.example .env
+# set SECRET_KEY, POSTGRES_PASSWORD, PUBLIC_APP_URL
+docker compose up -d --build
+```
+
+Important keys:
 
 - `SECRET_KEY` — JWT and credential encryption
 - `POSTGRES_PASSWORD`
