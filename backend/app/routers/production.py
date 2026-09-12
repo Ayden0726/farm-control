@@ -1,21 +1,28 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import (
+    FilamentTransaction,
     GCodeFile,
     JobStatus,
+    Notification,
+    Order,
     Part,
     PrintJob,
+    Printer,
+    ProductionPlan,
     ProductionRun,
     ProductionRunItem,
     ProductionRunPrinter,
     ProductionRunStatus,
+    QcBatch,
     User,
 )
 from app.schemas import ProductionProductIn, ProductionRunIn, ProductionRunOut
@@ -155,6 +162,87 @@ async def get_run(run_id: UUID, db: AsyncSession = Depends(get_db), _: User = De
     if not run:
         raise HTTPException(404, "Production run not found")
     return run_out(run)
+
+
+@router.delete("/{run_id}")
+async def delete_run(run_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    run = await db.get(ProductionRun, run_id)
+    if not run:
+        raise HTTPException(404, "Production run not found")
+    label = run.batch_code or run.name
+    active = (
+        await db.execute(
+            select(PrintJob).where(
+                PrintJob.production_run_id == run.id,
+                PrintJob.status.in_([JobStatus.printing, JobStatus.paused]),
+            )
+        )
+    ).scalars().all()
+    if active:
+        raise HTTPException(
+            400,
+            f"Cannot delete {label}: {len(active)} job(s) are still on a printer. "
+            "Wait for those plates to finish, then try again.",
+        )
+    assigned = (
+        await db.execute(
+            select(Printer).where(
+                Printer.current_job_id.in_(select(PrintJob.id).where(PrintJob.production_run_id == run.id))
+            )
+        )
+    ).scalars().all()
+    if assigned:
+        names = ", ".join(p.name for p in assigned[:4])
+        raise HTTPException(
+            400,
+            f"Cannot delete {label}: {names} still has a job from this run. "
+            "Wait for the plate to finish, then try again.",
+        )
+    await db.execute(
+        update(PrintJob)
+        .where(
+            PrintJob.production_run_id == run.id,
+            PrintJob.status.in_([JobStatus.queued, JobStatus.held]),
+        )
+        .values(status=JobStatus.cancelled)
+    )
+    item_ids = (
+        await db.execute(select(ProductionRunItem.id).where(ProductionRunItem.production_run_id == run.id))
+    ).scalars().all()
+    await db.execute(
+        update(PrintJob)
+        .where(PrintJob.production_run_id == run.id)
+        .values(production_run_id=None, production_run_item_id=None)
+    )
+    if item_ids:
+        await db.execute(
+            update(QcBatch).where(QcBatch.production_run_item_id.in_(item_ids)).values(production_run_item_id=None)
+        )
+        await db.execute(
+            update(PrintJob).where(PrintJob.production_run_item_id.in_(item_ids)).values(production_run_item_id=None)
+        )
+    await db.execute(update(Order).where(Order.production_run_id == run.id).values(production_run_id=None))
+    await db.execute(
+        update(ProductionPlan).where(ProductionPlan.production_run_id == run.id).values(production_run_id=None)
+    )
+    await db.execute(
+        update(FilamentTransaction)
+        .where(FilamentTransaction.production_run_id == run.id)
+        .values(production_run_id=None)
+    )
+    await db.execute(
+        update(Notification).where(Notification.production_run_id == run.id).values(production_run_id=None)
+    )
+    try:
+        await db.delete(run)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            400,
+            f"Cannot delete {label}: it is still referenced by farm records. Cancel remaining work instead.",
+        ) from exc
+    return {"ok": True, "deleted": True, "name": run.name, "batch_code": run.batch_code}
 
 
 @router.post("/{run_id}/add-product")

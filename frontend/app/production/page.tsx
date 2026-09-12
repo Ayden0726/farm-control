@@ -28,6 +28,8 @@ export default function ProductionPage() {
   const [productQty, setProductQty] = useState("1");
   const [includeOptional, setIncludeOptional] = useState(false);
   const [addingProduct, setAddingProduct] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ProductionRun | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function load() {
     setRuns(await api<ProductionRun[]>("/api/v1/production-runs"));
@@ -66,6 +68,21 @@ export default function ProductionPage() {
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await api(`/api/v1/production-runs/${pendingDelete.id}`, { method: "DELETE" });
+      toast.success(`Deleted ${pendingDelete.batch_code || pendingDelete.name}`);
+      setPendingDelete(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete run");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -306,7 +323,12 @@ export default function ProductionPage() {
                   {run.queued_jobs} queued · {run.printing_jobs} printing · {run.completed_jobs} complete
                 </div>
               </div>
-              <StatusPill status={run.status} />
+              <div className="flex items-center gap-2">
+                <StatusPill status={run.status} />
+                <Button size="sm" variant="destructive" onClick={() => setPendingDelete(run)}>
+                  Delete
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -327,7 +349,30 @@ export default function ProductionPage() {
             </CardContent>
           </Card>
         ))}
+        {runs.length === 0 && (
+          <p className="text-sm text-muted-foreground">No production runs yet. Create one to queue plates.</p>
+        )}
       </div>
+      <Dialog open={!!pendingDelete} onOpenChange={(next) => !next && setPendingDelete(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {pendingDelete?.batch_code || pendingDelete?.name}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This removes the run from Production. Queued plates are cancelled. Finished print jobs stay in history,
+            unlinked from the batch. If a printer is still running a plate from this run, FarmOS will refuse until that
+            job finishes.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPendingDelete(null)} disabled={deleting}>
+              Keep run
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete run"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

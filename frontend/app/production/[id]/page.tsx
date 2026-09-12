@@ -1,24 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { Product, ProductionRun } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export default function ProductionDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [run, setRun] = useState<ProductionRun | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [productId, setProductId] = useState("");
   const [productQty, setProductQty] = useState("1");
   const [includeOptional, setIncludeOptional] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [filament, setFilament] = useState<{
     overall: string;
     materials: { product_id: string; label: string; required_g: number; available_g: number; on_order_g: number }[];
@@ -96,6 +100,20 @@ export default function ProductionDetailPage() {
     }
   }
 
+  async function confirmDelete() {
+    if (!run) return;
+    setDeleting(true);
+    try {
+      await api(`/api/v1/production-runs/${run.id}`, { method: "DELETE" });
+      toast.success(`Deleted ${run.batch_code || run.name}`);
+      router.push("/production");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete run");
+      setDeleting(false);
+      setPendingDelete(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -119,6 +137,9 @@ export default function ProductionDetailPage() {
           </Button>
           <Button variant="destructive" size="sm" onClick={() => act("cancel")}>
             Cancel remaining
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => setPendingDelete(true)}>
+            Delete run
           </Button>
         </div>
       </div>
@@ -213,6 +234,25 @@ export default function ProductionDetailPage() {
           </Card>
         ))}
       </div>
+      <Dialog open={pendingDelete} onOpenChange={(next) => !next && !deleting && setPendingDelete(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {run.batch_code || run.name}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This removes the run from Production. Queued plates are cancelled. Finished print jobs stay in history. If a
+            printer is still running a plate from this run, FarmOS will refuse until that job finishes.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPendingDelete(false)} disabled={deleting}>
+              Keep run
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete run"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
