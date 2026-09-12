@@ -20,6 +20,7 @@ from app.models import (
     User,
 )
 from app.schemas import BomHardwareOut, BomItemOut, ProductIn, ProductOut
+from app.services.production_expand import run_items_for_product
 from app.services.shopify import shopify_numeric_id
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -121,6 +122,20 @@ async def _replace_bom(db: AsyncSession, product: Product, payload: ProductIn) -
 async def list_products(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     rows = (await db.execute(select(Product).options(*_LOAD).order_by(Product.sku))).scalars().all()
     return [_product_out(p) for p in rows]
+
+
+@router.get("/{product_id}/run-items")
+async def product_run_items(
+    product_id: UUID,
+    quantity: int = 1,
+    include_optional: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    expanded = await run_items_for_product(db, product_id, quantity, include_optional)
+    if not expanded:
+        raise HTTPException(404, "Product not found")
+    return expanded
 
 
 @router.post("", response_model=ProductOut)

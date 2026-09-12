@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { GCode, Part, Printer, ProductionRun } from "@/lib/types";
+import type { GCode, Part, Printer, Product, ProductionRun } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,17 +18,23 @@ export default function ProductionPage() {
   const [gcode, setGcode] = useState<GCode[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("Flex Rack 5 — Batch ");
+  const [name, setName] = useState("");
   const [selectedPrinters, setSelectedPrinters] = useState<string[]>([]);
   const [items, setItems] = useState<{ part_id: string; gcode_file_id: string; required_qty: number }[]>([
     { part_id: "", gcode_file_id: "", required_qty: 1 },
   ]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productId, setProductId] = useState("");
+  const [productQty, setProductQty] = useState("1");
+  const [includeOptional, setIncludeOptional] = useState(false);
+  const [addingProduct, setAddingProduct] = useState(false);
 
   async function load() {
     setRuns(await api<ProductionRun[]>("/api/v1/production-runs"));
     setParts(await api<Part[]>("/api/v1/parts"));
     setGcode(await api<GCode[]>("/api/v1/gcode"));
     setPrinters(await api<Printer[]>("/api/v1/printers"));
+    setProducts(await api<Product[]>("/api/v1/products"));
   }
   useEffect(() => {
     load();
@@ -43,14 +49,77 @@ export default function ProductionPage() {
           name,
           printer_ids: selectedPrinters,
           start_immediately: true,
-          items: items.filter((i) => i.part_id && i.required_qty > 0),
+          items: items
+            .filter((i) => i.part_id && i.required_qty > 0)
+            .map((i) => ({
+              part_id: i.part_id,
+              gcode_file_id: i.gcode_file_id || null,
+              required_qty: i.required_qty,
+            })),
         }),
       });
       toast.success("Production run created and queued");
       setOpen(false);
+      setName("");
+      setProductId("");
+      setItems([{ part_id: "", gcode_file_id: "", required_qty: 1 }]);
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function addProductBom() {
+    if (!productId) {
+      toast.error("Pick a product from the catalog first");
+      return;
+    }
+    setAddingProduct(true);
+    try {
+      const qty = Math.max(1, Number(productQty) || 1);
+      const res = await api<{
+        product_sku: string;
+        product_name: string;
+        items: { part_id: string; gcode_file_id: string | null; gcode_filename: string | null; required_qty: number }[];
+        missing_gcode: string[];
+        optional_skipped: string[];
+        multi_file_parts: string[];
+      }>(`/api/v1/products/${productId}/run-items?quantity=${qty}&include_optional=${includeOptional}`);
+      const next = res.items.map((row) => ({
+        part_id: row.part_id,
+        gcode_file_id: row.gcode_file_id || "",
+        required_qty: row.required_qty,
+      }));
+      if (!next.length) {
+        toast.error(`${res.product_sku} has no BOM parts to produce`);
+        return;
+      }
+      setItems((cur) => {
+        const kept = cur.filter((row) => row.part_id);
+        return kept.length ? [...kept, ...next] : next;
+      });
+      if (!name.trim()) {
+        setName(`${res.product_sku} × ${qty}`);
+      }
+      const files = res.items.filter((row) => row.gcode_file_id).length;
+      toast.success(
+        `Added ${files} G-code file${files === 1 ? "" : "s"} from ${res.product_sku} (${res.items.length} part line${res.items.length === 1 ? "" : "s"}).`,
+      );
+      if (res.missing_gcode.length) {
+        toast.message(`No G-code tagged for ${res.missing_gcode.join(", ")}. Tag files on the Library tab.`);
+      }
+      if (res.multi_file_parts.length) {
+        toast.message(
+          `${res.multi_file_parts.join(", ")} has more than one tagged file; each was added at full quantity. Remove extras if you only want one plate.`,
+        );
+      }
+      if (res.optional_skipped.length) {
+        toast.message(`Skipped optional ${res.optional_skipped.join(", ")}.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load product BOM");
+    } finally {
+      setAddingProduct(false);
     }
   }
 
@@ -58,8 +127,8 @@ export default function ProductionPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          A run can include multiple G-code files, copy counts, and a restricted printer pool. Remaining quantity is
-          required minus QC-passed parts.
+          A run can include a catalog product (BOM + tagged G-code) or individual parts. Remaining quantity is required
+          minus QC-passed parts.
         </p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>New production run</DialogTrigger>
@@ -70,7 +139,41 @@ export default function ProductionPage() {
             <form onSubmit={create} className="space-y-3">
               <div className="space-y-1">
                 <Label>Name</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="RK-FR5 × 5" required />
+              </div>
+              <div className="space-y-2 rounded-md border border-white/10 p-3">
+                <Label>Add from Products / BOM</Label>
+                <p className="text-xs text-zinc-500">
+                  Pulls every required BOM part and every non-archived G-code tagged to that part.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-[1fr_70px_auto]">
+                  <select
+                    className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                    value={productId}
+                    onChange={(e) => setProductId(e.target.value)}
+                  >
+                    <option value="">Product…</option>
+                    {products.filter((p) => p.is_active).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.sku} · {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={productQty}
+                    onChange={(e) => setProductQty(e.target.value)}
+                    aria-label="Product quantity"
+                  />
+                  <Button type="button" variant="outline" disabled={addingProduct || !productId} onClick={addProductBom}>
+                    {addingProduct ? "Adding…" : "Add product"}
+                  </Button>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-zinc-400">
+                  <input type="checkbox" checked={includeOptional} onChange={(e) => setIncludeOptional(e.target.checked)} />
+                  Include optional BOM accessories
+                </label>
               </div>
               <div className="space-y-1">
                 <Label>Allowed printers</Label>
@@ -92,13 +195,13 @@ export default function ProductionPage() {
                 </div>
               </div>
               {items.map((item, idx) => (
-                <div key={idx} className="grid gap-2 rounded-md border border-white/10 p-2 sm:grid-cols-3">
+                <div key={idx} className="grid gap-2 rounded-md border border-white/10 p-2 sm:grid-cols-[1fr_1fr_70px_auto]">
                   <select
                     className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
                     value={item.part_id}
                     onChange={(e) => {
                       const partId = e.target.value;
-                      const match = gcode.find((g) => g.part_id === partId);
+                      const match = gcode.find((g) => !g.is_archived && g.part_id === partId);
                       setItems((cur) =>
                         cur.map((c, i) =>
                           i === idx
@@ -141,7 +244,7 @@ export default function ProductionPage() {
                   >
                     <option value="">G-code…</option>
                     {gcode
-                      .filter((g) => !item.part_id || g.part_id === item.part_id)
+                      .filter((g) => !g.is_archived && (!item.part_id || g.part_id === item.part_id))
                       .map((g) => (
                         <option key={g.id} value={g.id}>
                           {g.filename} (×{g.quantity_per_file})
@@ -158,6 +261,20 @@ export default function ProductionPage() {
                       )
                     }
                   />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setItems((cur) =>
+                        cur.length <= 1
+                          ? [{ part_id: "", gcode_file_id: "", required_qty: 1 }]
+                          : cur.filter((_, i) => i !== idx),
+                      )
+                    }
+                  >
+                    Remove
+                  </Button>
                 </div>
               ))}
               <Button

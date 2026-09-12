@@ -3,15 +3,22 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
-import type { ProductionRun } from "@/lib/types";
+import type { Product, ProductionRun } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export default function ProductionDetailPage() {
   const params = useParams<{ id: string }>();
   const [run, setRun] = useState<ProductionRun | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productId, setProductId] = useState("");
+  const [productQty, setProductQty] = useState("1");
+  const [includeOptional, setIncludeOptional] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [filament, setFilament] = useState<{
     overall: string;
     materials: { product_id: string; label: string; required_g: number; available_g: number; on_order_g: number }[];
@@ -19,6 +26,11 @@ export default function ProductionDetailPage() {
 
   async function load() {
     setRun(await api<ProductionRun>(`/api/v1/production-runs/${params.id}`));
+    try {
+      setProducts(await api<Product[]>("/api/v1/products"));
+    } catch {
+      setProducts([]);
+    }
     try {
       setFilament(await api(`/api/v1/production-runs/${params.id}/filament-check`));
     } catch {
@@ -40,6 +52,47 @@ export default function ProductionDetailPage() {
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function addProduct() {
+    if (!productId) {
+      toast.error("Pick a product from the catalog first");
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await api<{
+        added: number;
+        missing_gcode: string[];
+        optional_skipped: string[];
+        multi_file_parts?: string[];
+        product_sku: string;
+      }>(`/api/v1/production-runs/${params.id}/add-product`, {
+        method: "POST",
+        body: JSON.stringify({
+          product_id: productId,
+          quantity: Math.max(1, Number(productQty) || 1),
+          include_optional: includeOptional,
+        }),
+      });
+      toast.success(`Added ${res.added} line${res.added === 1 ? "" : "s"} from ${res.product_sku}`);
+      if (res.missing_gcode.length) {
+        toast.message(`No G-code tagged for ${res.missing_gcode.join(", ")}. Tag files on the Library tab.`);
+      }
+      if (res.multi_file_parts?.length) {
+        toast.message(
+          `${res.multi_file_parts.join(", ")} has more than one tagged file; each was added at full quantity.`,
+        );
+      }
+      if (res.optional_skipped.length) {
+        toast.message(`Skipped optional ${res.optional_skipped.join(", ")}.`);
+      }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add product");
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -66,6 +119,49 @@ export default function ProductionDetailPage() {
           </Button>
         </div>
       </div>
+      {run.status !== "completed" && run.status !== "cancelled" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add product from catalog</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-zinc-500">
+              Adds every required BOM part and every G-code file tagged to those parts. Same part+file increases
+              quantity on the existing line.
+            </p>
+            <div className="grid gap-2 md:grid-cols-[1fr_80px_auto]">
+              <div>
+                <Label>Product</Label>
+                <select
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                >
+                  <option value="">Product…</option>
+                  {products.filter((p) => p.is_active).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} · {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Qty</Label>
+                <Input type="number" min={1} value={productQty} onChange={(e) => setProductQty(e.target.value)} />
+              </div>
+              <div className="flex items-end">
+                <Button type="button" disabled={adding || !productId} onClick={addProduct}>
+                  {adding ? "Adding…" : "Add product"}
+                </Button>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-zinc-400">
+              <input type="checkbox" checked={includeOptional} onChange={(e) => setIncludeOptional(e.target.checked)} />
+              Include optional BOM accessories
+            </label>
+          </CardContent>
+        </Card>
+      )}
       {filament && (
         <Card className={filament.overall !== "can_start" ? "border-amber-500/40" : ""}>
           <CardHeader>

@@ -304,12 +304,21 @@ class ProductionItemIn(BaseModel):
     required_qty: int = 1
 
 
+class ProductionProductIn(BaseModel):
+    product_id: UUID
+    quantity: int = 1
+    include_optional: bool = False
+
+
 class ProductionRunIn(BaseModel):
     name: str
     notes: str = ""
     printer_ids: list[UUID] = Field(default_factory=list)
     items: list[ProductionItemIn] = Field(default_factory=list)
     start_immediately: bool = True
+    product_id: UUID | None = None
+    product_qty: int = 1
+    include_optional: bool = False
 
 
 class ProductionItemOut(BaseModel):

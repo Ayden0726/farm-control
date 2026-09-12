@@ -68,7 +68,7 @@ The API is on port 8000 (`/docs` for OpenAPI).
 
 ## What the queue does
 
-- Create a production run with multiple G-code files and copy counts.
+- Create a production run with multiple G-code files and copy counts. **Add from Products / BOM** explodes a catalog product onto the run: every required printed part, and every non-archived G-code tagged to that part. Hardware BOM lines are skipped. Optional accessories stay off unless you check the box. You can do the same on an existing run with **Add product from catalog**.
 - Restrict which printers may take that run.
 - The scheduler assigns queued jobs to compatible **idle** printers.
 - When a print finishes, the printer is **Waiting for Bed Clear**. Nothing else starts on that machine until an operator confirms the bed is empty.
