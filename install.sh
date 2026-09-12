@@ -157,6 +157,7 @@ SMS_TO=
 
 UPLOAD_DIR=/data
 RUN_SCHEDULER=false
+APP_VERSION=dev
 EOF
 }
 
@@ -216,6 +217,13 @@ else
 fi
 
 say "Starting Print FarmOS (first run builds images and can take several minutes)"
+if [[ -d .git ]]; then
+  APP_VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+  export APP_VERSION
+  if [[ -f .env ]] && ! grep -q '^APP_VERSION=' .env; then
+    echo "APP_VERSION=${APP_VERSION}" >> .env
+  fi
+fi
 compose up -d --build
 
 say "Waiting for the UI"
@@ -242,6 +250,6 @@ echo "First visit opens the setup wizard. Create an admin account."
 echo "Uncheck Load demo data if this is a live shop."
 echo
 echo "Stop:    docker compose down"
-echo "Update:  git pull && ./install.sh"
+echo "Update:  ./update.sh"
 echo "Backup:  ./scripts/backup.sh"
 echo

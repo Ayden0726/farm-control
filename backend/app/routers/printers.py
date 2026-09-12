@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,13 +13,13 @@ from app.models import (
     Printer,
     PrinterAdapterType,
     PrinterStatus,
-    PrintJob,
     User,
     utcnow,
 )
 from app.schemas import PrinterIn, PrinterOut, PrinterUpdate
-from app.security import encrypt_secret
+from app.security import encrypt_secret, decrypt_secret
 from app.serialize import printer_out
+from app.services.printer_connect import normalize_base_url, probe_adapter, raise_if_offline
 from app.util import new_qr_token
 
 router = APIRouter(prefix="/printers", tags=["printers"])
@@ -60,22 +59,61 @@ async def list_printers(db: AsyncSession = Depends(get_db), _: User = Depends(ge
     return [printer_out(p) for p in rows]
 
 
+@router.post("/test")
+async def test_printer_connection(payload: PrinterIn, _: User = Depends(get_current_user)) -> dict:
+    result = await probe_adapter(
+        payload.adapter_type,
+        name=payload.name,
+        base_url=payload.base_url,
+        api_key=payload.api_key,
+        extra=payload.extra_config,
+    )
+    if not result.ok:
+        raise_if_offline(result)
+    return {
+        "ok": True,
+        "status": result.status,
+        "message": "Connection verified. The printer responded.",
+    }
+
+
 @router.post("", response_model=PrinterOut)
 async def create_printer(
     payload: PrinterIn, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
 ):
+    url = normalize_base_url(payload.base_url)
+    result = await probe_adapter(
+        payload.adapter_type,
+        name=payload.name,
+        base_url=url,
+        api_key=payload.api_key,
+        extra=payload.extra_config,
+    )
+    raise_if_offline(result)
+    snap = result.snapshot
+    status = PrinterStatus.idle
+    if payload.adapter_type != "simulated":
+        if snap and snap.status in PrinterStatus._value2member_map_:
+            status = PrinterStatus(snap.status)
+        else:
+            status = PrinterStatus.idle
     printer = Printer(
         name=payload.name,
         model=payload.model,
         adapter_type=PrinterAdapterType(payload.adapter_type),
-        base_url=payload.base_url,
+        base_url=url,
         api_key_encrypted=encrypt_secret(payload.api_key) if payload.api_key else None,
         extra_config=payload.extra_config,
         is_enabled=payload.is_enabled,
         assigned_spool_id=payload.assigned_spool_id,
         maintenance_interval_hours=payload.maintenance_interval_hours,
         maintenance_notes=payload.maintenance_notes,
-        status=PrinterStatus.idle if payload.adapter_type == "simulated" else PrinterStatus.offline,
+        status=status,
+        nozzle_temp=snap.nozzle_temp if snap else 0,
+        bed_temp=snap.bed_temp if snap else 0,
+        target_nozzle=snap.target_nozzle if snap else 0,
+        target_bed=snap.target_bed if snap else 0,
+        last_seen_at=utcnow() if result.ok else None,
         qr_token=new_qr_token(),
         public_code=None,
     )
@@ -107,12 +145,33 @@ async def update_printer(
     data = payload.model_dump(exclude_unset=True)
     api_key = data.pop("api_key", None)
     adapter_type = data.pop("adapter_type", None)
+    if "base_url" in data and data["base_url"]:
+        data["base_url"] = normalize_base_url(data["base_url"])
+    connection_changed = any(k in data for k in ("base_url", "extra_config")) or api_key is not None or adapter_type is not None
     for key, value in data.items():
         setattr(printer, key, value)
     if adapter_type:
         printer.adapter_type = PrinterAdapterType(adapter_type)
     if api_key:
         printer.api_key_encrypted = encrypt_secret(api_key)
+    if connection_changed and printer.adapter_type.value != "simulated":
+        key_to_try = api_key if api_key else decrypt_secret(printer.api_key_encrypted)
+        result = await probe_adapter(
+            printer.adapter_type.value,
+            name=printer.name,
+            base_url=printer.base_url,
+            api_key=key_to_try,
+            extra=printer.extra_config,
+        )
+        raise_if_offline(result)
+        snap = result.snapshot
+        printer.last_seen_at = utcnow()
+        printer.last_error = None
+        if snap:
+            printer.nozzle_temp = snap.nozzle_temp
+            printer.bed_temp = snap.bed_temp
+            if printer.status != PrinterStatus.waiting_for_bed_clear and snap.status in PrinterStatus._value2member_map_:
+                printer.status = PrinterStatus(snap.status)
     await db.commit()
     return printer_out(await _load_printer(db, printer.id))
 

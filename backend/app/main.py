@@ -138,7 +138,7 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     async def health():
-        return {"status": "ok", "app": "Print FarmOS"}
+        return {"status": "ok", "app": "Print FarmOS", "version": settings.app_version}
 
     return application
 

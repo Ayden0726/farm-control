@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { Printer, Spool } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,9 @@ export default function PrinterDetailPage() {
   const [interval, setIntervalHours] = useState("200");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [howToFix, setHowToFix] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     const p = await api<Printer>(`/api/v1/printers/${params.id}`);
@@ -42,6 +45,9 @@ export default function PrinterDetailPage() {
 
   async function save() {
     const id = params.id;
+    setError(null);
+    setHowToFix([]);
+    setBusy(true);
     try {
       await api(`/api/v1/printers/${id}`, {
         method: "PATCH",
@@ -51,12 +57,18 @@ export default function PrinterDetailPage() {
           base_url: baseUrl || null,
           api_key: apiKey || undefined,
         }),
+        signal: AbortSignal.timeout(45000),
       });
-      toast.success("Printer updated");
+      toast.success("Connection verified. Printer updated.");
       setApiKey("");
       load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
+      const message = err instanceof Error ? err.message : "Save failed";
+      setError(message);
+      setHowToFix(err instanceof ApiError ? err.howToFix : []);
+      toast.error(message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -156,9 +168,24 @@ export default function PrinterDetailPage() {
             <Label>New API key (leave blank to keep current)</Label>
             <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
             <p className="text-xs text-zinc-500">
-              {printer.has_api_key ? "An API key is stored on the server." : "No API key stored."} Credentials are never shown in the UI.
+              {printer.has_api_key ? "An API key is stored on the server." : "No API key stored."} Credentials are never shown in the UI. Use the printer’s LAN IP, not localhost.
             </p>
-            <Button onClick={save}>Save connection</Button>
+            {error && (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="font-medium">Could not connect</div>
+                <p className="mt-1">{error}</p>
+                {howToFix.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-4">
+                    {howToFix.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <Button onClick={save} disabled={busy}>
+              {busy ? "Checking connection…" : "Verify connection and save"}
+            </Button>
           </div>
           <div className="space-y-2">
             <Label>Assigned spool</Label>

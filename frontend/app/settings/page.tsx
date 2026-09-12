@@ -15,6 +15,8 @@ type Settings = {
   woocommerce_configured: boolean;
   notify_webhook_configured: boolean;
   simulated_time_scale: number;
+  app_version: string;
+  update_command: string;
 };
 
 export default function SettingsPage() {
@@ -99,6 +101,29 @@ export default function SettingsPage() {
         </Card>
       </form>
       <PhoneNotificationSettings />
+      <Card>
+        <CardHeader>
+          <CardTitle>Application update</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p>
+            Running version <span className="font-mono">{settings.app_version || "dev"}</span>.
+          </p>
+          <p className="text-muted-foreground">
+            Updates are applied on the server (this page cannot rebuild Docker from the browser). SSH into
+            the machine that runs Print FarmOS, open the install folder, and run:
+          </p>
+          <pre className="overflow-x-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs">
+            {`git pull
+./update.sh`}
+          </pre>
+          <p className="text-xs text-zinc-500">
+            On Windows with Docker Desktop use <span className="font-mono">.\update.ps1</span> after{" "}
+            <span className="font-mono">git pull</span>. First run rebuilds images and can take several
+            minutes. Your database and G-code uploads are kept.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

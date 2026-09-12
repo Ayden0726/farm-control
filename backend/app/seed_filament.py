@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models import (
     AppSetting,
@@ -13,6 +14,7 @@ from app.models import (
     FilamentTransaction,
     IdSequence,
     PartBin,
+    PrintJob,
     Printer,
     PurchaseOrder,
     PurchaseOrderLine,
@@ -34,9 +36,114 @@ LOCATIONS = [
     ("Dryer 2", "dryer"),
 ]
 
+SEED_CATALOG = [
+    ("Siddament", "PETG", "Black", 3000),
+    ("Siddament", "PETG", "Grey", 3000),
+    ("Siddament", "PETG", "White", 3000),
+    ("Siddament", "PETG", "Electric Blue", 3000),
+    ("Sunlu", "PETG", "Black", 1000),
+    ("eSun", "PLA", "Grey", 1000),
+    ("Polymaker", "PETG", "Orange", 1000),
+    ("eSun", "PETG", "White", 1000),
+]
+SEED_BARCODES = {product_barcode_id(*row) for row in SEED_CATALOG}
+SEED_SKUS = {
+    "SID-PETG-BLK-3",
+    "SID-PETG-GRY-3",
+    "SID-PETG-WHT-3",
+    "SID-PETG-EBL-3",
+    "SUN-PETG-BLK-1",
+    "ESUN-PLA-GRY-1",
+    "POLY-PETG-ORG-1",
+    "ESUN-PETG-WHT-1",
+}
+SEED_SPOOL_NAMES = {
+    "Sunlu PETG Black 1kg",
+    "eSun PETG White 1kg",
+    "Polymaker PETG Orange 1kg",
+    "Sunlu PETG Black 1kg #2",
+    "eSun PLA+ Grey 1kg",
+}
+DEMO_TX_NOTES = {"Demo receiving", "Historical usage from demo farm"}
+
+
+async def clear_seeded_filament_inventory(db: AsyncSession) -> None:
+    """One-time: drop auto-seeded demo rolls/profiles. Keep anything the shop received itself."""
+    flag = await db.get(AppSetting, "cleared_seed_filament")
+    if flag is not None:
+        return
+
+    spools = list(
+        (
+            await db.execute(select(FilamentSpool).options(selectinload(FilamentSpool.transactions)))
+        ).scalars().all()
+    )
+    demo_ids: list = []
+    for spool in spools:
+        notes = {(tx.notes or "").strip() for tx in spool.transactions}
+        if notes & DEMO_TX_NOTES or spool.name in SEED_SPOOL_NAMES:
+            demo_ids.append(spool.id)
+            continue
+        product = await db.get(FilamentProduct, spool.product_id) if spool.product_id else None
+        receive_notes = [(tx.notes or "") for tx in spool.transactions if tx.reason == "receive"]
+        if product and (product.barcode_id in SEED_BARCODES or product.supplier_sku in SEED_SKUS):
+            if receive_notes and all("Demo" in n or "demo farm" in n.lower() for n in receive_notes):
+                demo_ids.append(spool.id)
+
+    if demo_ids:
+        printers = (await db.execute(select(Printer).where(Printer.assigned_spool_id.in_(demo_ids)))).scalars().all()
+        for printer in printers:
+            printer.assigned_spool_id = None
+        jobs = (await db.execute(select(PrintJob).where(PrintJob.spool_id.in_(demo_ids)))).scalars().all()
+        for job in jobs:
+            job.spool_id = None
+        await db.flush()
+        await db.execute(delete(FilamentTransaction).where(FilamentTransaction.spool_id.in_(demo_ids)))
+        await db.execute(delete(FilamentSpool).where(FilamentSpool.id.in_(demo_ids)))
+        await db.flush()
+
+    products = list((await db.execute(select(FilamentProduct))).scalars().all())
+    leftover = {
+        row.product_id
+        for row in (await db.execute(select(FilamentSpool.product_id).where(FilamentSpool.product_id.is_not(None)))).all()
+    }
+    seed_product_ids = [
+        p.id
+        for p in products
+        if (p.barcode_id in SEED_BARCODES or p.supplier_sku in SEED_SKUS) and p.id not in leftover
+    ]
+    if seed_product_ids:
+        po_ids = [
+            row[0]
+            for row in (
+                await db.execute(
+                    select(PurchaseOrderLine.purchase_order_id).where(
+                        PurchaseOrderLine.product_id.in_(seed_product_ids)
+                    )
+                )
+            ).all()
+        ]
+        if po_ids:
+            await db.execute(delete(PurchaseOrderLine).where(PurchaseOrderLine.purchase_order_id.in_(po_ids)))
+            await db.execute(delete(PurchaseOrder).where(PurchaseOrder.id.in_(po_ids)))
+        await db.execute(delete(FilamentProduct).where(FilamentProduct.id.in_(seed_product_ids)))
+
+    demo_pos = (
+        await db.execute(select(PurchaseOrder).where(PurchaseOrder.reason.ilike("%Recommended 5 × 3 kg%")))
+    ).scalars().all()
+    if demo_pos:
+        ids = [po.id for po in demo_pos]
+        await db.execute(delete(PurchaseOrderLine).where(PurchaseOrderLine.purchase_order_id.in_(ids)))
+        await db.execute(delete(PurchaseOrder).where(PurchaseOrder.id.in_(ids)))
+
+    db.add(AppSetting(key="cleared_seed_filament", value=True))
+    await audit(db, "cleared_seed_filament", "filament", "inventory", {"removed_spools": len(demo_ids)})
+    await db.flush()
+
 
 async def ensure_filament_system(db: AsyncSession, *, demo_rich: bool = False) -> None:
-    """Idempotent: catalog, locations, public codes, spend controls."""
+    """Idempotent: spend controls, locations, public codes. Does not invent filament stock."""
+    await clear_seeded_filament_inventory(db)
     spend = await db.get(AppSetting, "filament_spend")
     if spend is None:
         db.add(AppSetting(key="filament_spend", value=dict(DEFAULT_SPEND)))
@@ -76,68 +183,14 @@ async def ensure_filament_system(db: AsyncSession, *, demo_rich: bool = False) -
             )
 
     suppliers = {s.name: s for s in (await db.execute(select(Supplier))).scalars().all()}
-    if not suppliers:
-        for name, site, adapter in [
-            ("Siddament", "https://siddament.com.au", "url"),
-            ("Sunlu", "https://www.sunlu.com", "url"),
-            ("eSun", "https://www.esun3d.com", "url"),
-            ("Polymaker", "https://polymaker.com", "url"),
-        ]:
-            s = Supplier(name=name, website=site, adapter_type=adapter, capabilities=["product_url", "stored_price"])
-            db.add(s)
-            suppliers[name] = s
-        await db.flush()
 
     products = list((await db.execute(select(FilamentProduct))).scalars().all())
-    if not products:
-        catalog = [
-            ("Siddament", "Siddament PETG", "PETG", "Black", "3 kg", 3000, 57.0, "Siddament", 6000, 18000, "SID-PETG-BLK-3"),
-            ("Siddament", "Siddament PETG", "PETG", "Grey", "3 kg", 3000, 57.0, "Siddament", 3000, 9000, "SID-PETG-GRY-3"),
-            ("Siddament", "Siddament PETG", "PETG", "White", "3 kg", 3000, 57.0, "Siddament", 3000, 9000, "SID-PETG-WHT-3"),
-            ("Siddament", "Siddament PETG", "PETG", "Electric Blue", "3 kg", 3000, 62.0, "Siddament", 3000, 6000, "SID-PETG-EBL-3"),
-            ("Sunlu", "Sunlu PETG", "PETG", "Black", "1 kg", 1000, 22.5, "Sunlu", 2000, 6000, "SUN-PETG-BLK-1"),
-            ("eSun", "eSun PLA+", "PLA", "Grey", "1 kg", 1000, 19.0, "eSun", 1000, 3000, "ESUN-PLA-GRY-1"),
-            ("Polymaker", "PolyLite PETG", "PETG", "Orange", "1 kg", 1000, 28.0, "Polymaker", 1000, 3000, "POLY-PETG-ORG-1"),
-            ("eSun", "eSun PETG", "PETG", "White", "1 kg", 1000, 24.0, "eSun", 2000, 4000, "ESUN-PETG-WHT-1"),
-        ]
-        for mfr, pname, mat, color, size, weight, cost, supplier_name, mn, tgt, sku in catalog:
-            p = FilamentProduct(
-                barcode_id=product_barcode_id(mfr, mat, color, weight),
-                manufacturer=mfr,
-                product_name=pname,
-                material=mat,
-                color=color,
-                spool_size_label=size,
-                filament_weight_g=weight,
-                purchase_cost=cost,
-                cost_per_kg=cost_per_kg(cost, weight),
-                preferred_supplier_id=suppliers[supplier_name].id,
-                supplier_sku=sku,
-                supplier_url=suppliers[supplier_name].website,
-                nozzle_temp_c=250 if mat == "PETG" else 210,
-                bed_temp_c=80 if mat == "PETG" else 60,
-                min_stock_g=mn,
-                target_stock_g=tgt,
-                preferred_spool_weight_g=weight,
-                normal_price=cost,
-                max_price=cost * 1.25,
-                max_price_per_kg=cost_per_kg(cost * 1.25, weight),
-                min_reorder_qty=1,
-                reorder_multiple=1,
-                lead_time_days=7 if mfr == "Siddament" else 10,
-                reorder_mode="create_purchase_order",
-                approval_required=True,
-            )
-            db.add(p)
-            products.append(p)
-        await db.flush()
-        demo_rich = True
 
     by_key = {(p.manufacturer.lower(), p.material.lower(), p.color.lower(), round(p.filament_weight_g)): p for p in products}
 
     seq = await db.get(IdSequence, "spool")
     if seq is None:
-        seq = IdSequence(name="spool", next_value=141)
+        seq = IdSequence(name="spool", next_value=1)
         db.add(seq)
         await db.flush()
 

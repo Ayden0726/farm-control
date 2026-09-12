@@ -1,10 +1,12 @@
 export class ApiError extends Error {
   status: number;
   detail: string;
-  constructor(status: number, detail: string) {
+  howToFix: string[];
+  constructor(status: number, detail: string, howToFix: string[] = []) {
     super(detail);
     this.status = status;
     this.detail = detail;
+    this.howToFix = howToFix;
   }
 }
 
@@ -21,6 +23,22 @@ export function setToken(value: string | null) {
 
 export function getToken() {
   return token();
+}
+
+function parseDetail(body: { detail?: unknown }): { detail: string; howToFix: string[] } {
+  const raw = body.detail;
+  if (typeof raw === "string") return { detail: raw, howToFix: [] };
+  if (Array.isArray(raw)) {
+    return { detail: raw.map((d: { msg?: string }) => d.msg).join("; "), howToFix: [] };
+  }
+  if (raw && typeof raw === "object") {
+    const obj = raw as { error?: string; message?: string; how_to_fix?: string[] };
+    return {
+      detail: obj.error || obj.message || "Request failed",
+      howToFix: Array.isArray(obj.how_to_fix) ? obj.how_to_fix : [],
+    };
+  }
+  return { detail: "Request failed", howToFix: [] };
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -47,14 +65,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     let detail = res.statusText;
+    let howToFix: string[] = [];
     try {
-      const body = await res.json();
-      if (typeof body.detail === "string") detail = body.detail;
-      else if (Array.isArray(body.detail)) detail = body.detail.map((d: { msg?: string }) => d.msg).join("; ");
+      const parsed = parseDetail(await res.json());
+      detail = parsed.detail;
+      howToFix = parsed.howToFix;
     } catch {
       /* ignore */
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, howToFix);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

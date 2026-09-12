@@ -28,6 +28,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       RUN_SCHEDULER: "false"
       UPLOAD_DIR: /data
+      APP_VERSION: ${APP_VERSION:-dev}
     volumes:
       - uploads:/data
     depends_on:
@@ -48,6 +49,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       RUN_SCHEDULER: "true"
       UPLOAD_DIR: /data
+      APP_VERSION: ${APP_VERSION:-dev}
     volumes:
       - uploads:/data
     depends_on:

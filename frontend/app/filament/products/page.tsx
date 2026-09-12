@@ -158,6 +158,11 @@ export default function ProductsPage() {
           ))}
         </TableBody>
       </Table>
+      {rows.length === 0 && (
+        <p className="text-sm text-zinc-500">
+          No filament profiles yet. Inventory is empty until you create a profile and add rolls.
+        </p>
+      )}
     </div>
   );
 }

@@ -253,6 +253,8 @@ async def get_settings_api(db: AsyncSession = Depends(get_db), _: User = Depends
         notify_webhook_configured=bool(settings.notify_webhook_url),
         simulated_time_scale=settings.simulated_time_scale,
         filament_low_grams=settings.filament_low_grams,
+        app_version=settings.app_version or "dev",
+        update_command="./update.sh",
     )
 
 
@@ -290,6 +292,8 @@ async def put_settings(
         notify_webhook_configured=bool(settings.notify_webhook_url),
         simulated_time_scale=settings.simulated_time_scale,
         filament_low_grams=settings.filament_low_grams,
+        app_version=settings.app_version or "dev",
+        update_command="./update.sh",
     )
 
 

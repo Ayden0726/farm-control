@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ApiError, api } from "@/lib/api";
 import type { Printer } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
@@ -10,17 +10,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatDuration, formatHours } from "@/lib/format";
 import { toast } from "sonner";
 import { QrDialog } from "@/components/qr-dialog";
 
+const URL_HINT: Record<string, string> = {
+  octoprint: "http://192.168.1.50",
+  moonraker: "http://192.168.1.50:7125",
+  creality: "http://192.168.1.50:4408",
+};
+
 export default function PrintersPage() {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [howToFix, setHowToFix] = useState<string[]>([]);
   const [form, setForm] = useState({
     name: "",
     model: "",
-    adapter_type: "simulated",
+    adapter_type: "octoprint",
     base_url: "",
     api_key: "",
   });
@@ -34,8 +44,16 @@ export default function PrintersPage() {
     return () => clearInterval(id);
   }, []);
 
+  const urlPlaceholder = useMemo(
+    () => URL_HINT[form.adapter_type] || "http://192.168.1.50",
+    [form.adapter_type],
+  );
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
+    setError(null);
+    setHowToFix([]);
+    setBusy(true);
     try {
       await api("/api/v1/printers", {
         method: "POST",
@@ -44,13 +62,19 @@ export default function PrintersPage() {
           base_url: form.base_url || null,
           api_key: form.api_key || null,
         }),
+        signal: AbortSignal.timeout(45000),
       });
-      toast.success("Printer added");
+      toast.success("Connection verified. Printer saved.");
       setOpen(false);
-      setForm({ name: "", model: "", adapter_type: "simulated", base_url: "", api_key: "" });
+      setForm({ name: "", model: "", adapter_type: "octoprint", base_url: "", api_key: "" });
       load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed");
+      const message = err instanceof Error ? err.message : "Could not add printer";
+      setError(message);
+      setHowToFix(err instanceof ApiError ? err.howToFix : []);
+      toast.error(message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -58,9 +82,19 @@ export default function PrintersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          OctoPrint, Moonraker/Klipper, Creality K1/K2, and simulated adapters. API keys stay on the server.
+          OctoPrint, Moonraker/Klipper, Creality K1/K2, and simulated adapters. FarmOS verifies the
+          connection before it saves the printer. API keys stay on the server.
         </p>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) {
+              setError(null);
+              setHowToFix([]);
+            }
+          }}
+        >
           <DialogTrigger render={<Button />}>Add printer</DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
@@ -74,7 +108,7 @@ export default function PrintersPage() {
               <div className="space-y-1">
                 <Label>Model</Label>
                 <Input
-                  placeholder="Creality CR-6 Max"
+                  placeholder="Creality K1 Max"
                   value={form.model}
                   onChange={(e) => setForm({ ...form, model: e.target.value })}
                 />
@@ -84,23 +118,27 @@ export default function PrintersPage() {
                 <select
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
                   value={form.adapter_type}
-                  onChange={(e) => setForm({ ...form, adapter_type: e.target.value })}
+                  onChange={(e) => setForm({ ...form, adapter_type: e.target.value, base_url: "" })}
                 >
-                  <option value="simulated">Simulated (development)</option>
                   <option value="octoprint">OctoPrint</option>
                   <option value="moonraker">Moonraker / Klipper</option>
                   <option value="creality">Creality K1 Max / K2 Pro</option>
+                  <option value="simulated">Simulated (no hardware)</option>
                 </select>
               </div>
               {form.adapter_type !== "simulated" && (
                 <>
                   <div className="space-y-1">
-                    <Label>Base URL</Label>
+                    <Label>Printer URL</Label>
                     <Input
-                      placeholder="http://192.168.1.50:80"
+                      placeholder={urlPlaceholder}
                       value={form.base_url}
                       onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+                      required
                     />
+                    <p className="text-xs text-zinc-500">
+                      Use the printer’s LAN IP as seen from this FarmOS server — not localhost.
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <Label>API key (stored encrypted, never sent back)</Label>
@@ -112,8 +150,23 @@ export default function PrintersPage() {
                   </div>
                 </>
               )}
-              <Button type="submit" className="w-full">
-                Save printer
+              {error && (
+                <Alert variant="destructive">
+                  <AlertTitle>Could not connect</AlertTitle>
+                  <AlertDescription>
+                    <p>{error}</p>
+                    {howToFix.length > 0 && (
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-left">
+                        {howToFix.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? "Checking connection…" : "Verify connection and save"}
               </Button>
             </form>
           </DialogContent>
@@ -161,7 +214,7 @@ export default function PrintersPage() {
         </TableBody>
       </Table>
       {printers.length === 0 && (
-        <p className="text-sm text-zinc-500">No printers yet. Add a simulated printer to test the queue.</p>
+        <p className="text-sm text-zinc-500">No printers yet. Add one and FarmOS will check the connection first.</p>
       )}
     </div>
   );

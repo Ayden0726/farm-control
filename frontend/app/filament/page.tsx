@@ -132,6 +132,21 @@ export default function FilamentDashboard() {
           </CardContent>
         </Card>
       </div>
+      {data.products.length === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>No filament in inventory</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Inventory starts empty. Create a filament profile, then add the physical rolls you actually have.
+            </p>
+            <Link href="/filament/products" className={cn(buttonVariants(), "inline-flex h-10 items-center")}>
+              Create a filament profile
+            </Link>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
         {data.products.map((row) => (
           <Card key={row.product.id} className={row.stock.below_minimum ? "border-amber-500/40" : ""}>

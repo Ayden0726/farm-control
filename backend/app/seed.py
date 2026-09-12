@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models import (
     BomItem,
-    DryingStatus,
-    FilamentSpool,
     FinishedPartStock,
     GCodeFile,
     JobStatus,
@@ -159,36 +157,6 @@ async def seed_demo(db: AsyncSession) -> None:
         printers.append(printer)
     await db.flush()
 
-    spools_spec = [
-        ("Sunlu PETG Black 1kg", "Sunlu", "PETG", "Black", 1000, 640, 22.50, printers[0].id, DryingStatus.dry),
-        ("eSun PETG White 1kg", "eSun", "PETG", "White", 1000, 120, 24.00, printers[1].id, DryingStatus.needs_drying),
-        ("Polymaker PETG Orange 1kg", "Polymaker", "PETG", "Orange", 1000, 810, 28.00, printers[2].id, DryingStatus.dry),
-        ("Sunlu PETG Black 1kg #2", "Sunlu", "PETG", "Black", 1000, 980, 22.50, printers[3].id, DryingStatus.drying),
-        ("eSun PLA+ Grey 1kg", "eSun", "PLA", "Grey", 1000, 430, 19.00, None, DryingStatus.unknown),
-    ]
-    spools: list[FilamentSpool] = []
-    for name, mfr, mat, color, initial, remaining, cost, printer_id, drying in spools_spec:
-        spool = FilamentSpool(
-            name=name,
-            manufacturer=mfr,
-            material=mat,
-            color=color,
-            initial_weight_g=initial,
-            remaining_weight_g=remaining,
-            cost=cost,
-            purchase_date=now - timedelta(days=20),
-            assigned_printer_id=printer_id,
-            drying_status=drying,
-            low_stock_threshold_g=150,
-            qr_token=new_qr_token(),
-        )
-        db.add(spool)
-        spools.append(spool)
-    await db.flush()
-    for printer, spool in zip(printers, spools):
-        if spool.assigned_printer_id == printer.id:
-            printer.assigned_spool_id = spool.id
-
     run = ProductionRun(
         name="Flex Rack 5 — Batch 001",
         status=ProductionRunStatus.in_progress,
@@ -240,7 +208,7 @@ async def seed_demo(db: AsyncSession) -> None:
         started_at=now - timedelta(seconds=4200 * 0.67 / get_settings().simulated_time_scale),
         estimated_filament_grams=48,
         estimated_time_seconds=4200,
-        spool_id=spools[0].id,
+        spool_id=None,
         qr_token=new_qr_token(),
     )
     db.add(handle_job)
@@ -275,7 +243,7 @@ async def seed_demo(db: AsyncSession) -> None:
         started_at=now - timedelta(seconds=15000 * 0.23 / get_settings().simulated_time_scale),
         estimated_filament_grams=186,
         estimated_time_seconds=15000,
-        spool_id=spools[2].id,
+        spool_id=None,
         qr_token=new_qr_token(),
     )
     db.add(frame_job)
@@ -313,7 +281,7 @@ async def seed_demo(db: AsyncSession) -> None:
         filament_used_grams=94,
         filament_cost=round((24 / 1000) * 94, 2),
         estimated_time_seconds=9800,
-        spool_id=spools[1].id,
+        spool_id=None,
         qr_token=new_qr_token(),
     )
     db.add(done_job)
@@ -508,19 +476,6 @@ async def seed_demo(db: AsyncSession) -> None:
     )
     db.add(
         Notification(
-            type=NotificationType.filament_low.value,
-            title="Low filament: eSun PETG White 1kg",
-            body="120 g remaining. Bay-02 may not complete a full upright plate.",
-            severity="warning",
-            entity_type="spool",
-            entity_id=str(spools[1].id),
-            printer_id=printers[1].id,
-            printer_name=printers[1].name,
-            deep_link="/filament",
-        )
-    )
-    db.add(
-        Notification(
             type=NotificationType.print_failed.value,
             title="Bay-05 CR-6 SE — Print Failed",
             body="RK-FR5-TopFrame.gcode failed on Bay-05 CR-6 SE.\n\nReason: Layer shift at 41% — belt skipped. Reprint queued.",
@@ -551,5 +506,5 @@ async def seed_demo(db: AsyncSession) -> None:
     await ensure_defaults(db)
     from app.seed_filament import ensure_filament_system
 
-    await ensure_filament_system(db, demo_rich=True)
+    await ensure_filament_system(db)
     await db.flush()

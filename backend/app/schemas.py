@@ -443,6 +443,8 @@ class SettingsOut(BaseModel):
     notify_webhook_configured: bool
     simulated_time_scale: float
     filament_low_grams: float
+    app_version: str = "dev"
+    update_command: str = "./update.sh"
 
 
 class SettingsIn(BaseModel):

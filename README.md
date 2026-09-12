@@ -42,6 +42,18 @@ If phones or other PCs will use a specific address:
 ./install.sh --host http://192.168.1.50:3000
 ```
 
+## Update
+
+On the server, in the install folder:
+
+```bash
+./update.sh
+```
+
+Windows with Docker Desktop: `.\update.ps1`
+
+That pulls the latest code and rebuilds containers. Postgres data and uploaded G-code are kept. You can also open **Settings → Application update** in the UI for the same commands.
+
 The API is on port 8000 (`/docs` for OpenAPI).
 
 ## What the queue does
@@ -135,7 +147,7 @@ The notification includes a button/link into that printer so the operator can co
 
 ## Filament inventory and FarmOS barcodes
 
-Manufacturer barcodes are **not** used. FarmOS generates its own codes, and filament information is entered **once** as a reusable **filament profile**:
+Inventory starts **empty**. Manufacturer barcodes are **not** used. FarmOS generates its own codes, and filament information is entered **once** as a reusable **filament profile**:
 
 - **Filament profile** (`FILT-SID-PETG-BLACK-3KG`) — manufacturer, product, material, colour, spool size, supplier, normal cost, temperatures, and reorder settings. Print this barcode for the shelf or receiving bench.
 - **Physical spool** (`SPOOL-000142`) — one actual roll. Sequential numbers come from a locked database sequence and are never reused, including after a roll is emptied or archived.
