@@ -60,8 +60,6 @@ function LoginForm() {
   return (
     <div className="farm-grid flex min-h-screen items-center justify-center p-4">
       <form
-        method="post"
-        action="#"
         onSubmit={onSubmit}
         className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121820]/90 p-8 shadow-2xl backdrop-blur"
       >
