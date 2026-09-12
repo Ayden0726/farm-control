@@ -446,16 +446,23 @@ def print_complete_copy(
     quantity: int,
     duration_seconds: int,
     completed_at: datetime,
+    assume_ejection: bool = False,
 ) -> tuple[str, str]:
     when = completed_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     title = f"{printer_name} — Print Complete"
+    if assume_ejection:
+        status_line = "Status: Bed assumed clear (automatic part removal)"
+        next_step = "The next queued job can start on this printer without a bed-clear confirmation."
+    else:
+        status_line = "Status: Waiting for Bed Clear"
+        next_step = "Open Print FarmOS to clear the bed and start the next queued job."
     body = (
         f"{filename} has finished printing.\n\n"
         f"Production Run: {run_name or '—'}\n"
         f"Quantity: {quantity}\n"
-        f"Status: Waiting for Bed Clear\n"
+        f"{status_line}\n"
         f"Duration: {format_duration(duration_seconds)}\n"
         f"Completed: {when}\n\n"
-        "Open Print FarmOS to clear the bed and start the next queued job."
+        f"{next_step}"
     )
     return title, body

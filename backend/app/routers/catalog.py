@@ -12,7 +12,9 @@ from app.deps import get_current_user
 from app.models import GCodeFile, GCodePrinterCompat, Part, StlFile, User
 from app.schemas import GCodeOut, GCodeUpdate, PartIn, PartOut, StlOut
 from app.serialize import gcode_out
+from app.services.farm_settings import get_automation
 from app.services.inventory import get_or_create_stock
+from app.services.stl import bounding_box, copies_on_plate
 from app.util import parse_gcode_metadata, parse_quantity_from_filename
 
 parts_router = APIRouter(prefix="/parts", tags=["parts"])
@@ -175,10 +177,80 @@ async def update_gcode(
     return gcode_out(gcode)
 
 
+def _apply_stl_bounds(stl: StlFile, content: bytes | None = None) -> None:
+    if stl.bbox_x_mm is not None:
+        return
+    data = content
+    if data is None:
+        path = Path(stl.stored_path)
+        if path.is_file():
+            data = path.read_bytes()
+    if not data:
+        return
+    box = bounding_box(data)
+    if not box:
+        return
+    stl.bbox_x_mm = box.x_mm
+    stl.bbox_y_mm = box.y_mm
+    stl.bbox_z_mm = box.z_mm
+    stl.triangle_count = box.triangle_count
+
+
+def _stl_out(stl: StlFile, automation: dict) -> StlOut:
+    copies = cols = rows = None
+    rotated = False
+    if stl.bbox_x_mm is not None and stl.bbox_y_mm is not None:
+        pack = copies_on_plate(
+            float(stl.bbox_x_mm),
+            float(stl.bbox_y_mm),
+            float(automation["pack_bed_x_mm"]),
+            float(automation["pack_bed_y_mm"]),
+            float(automation["pack_gap_mm"]),
+        )
+        copies = pack.copies
+        rotated = pack.rotated
+        cols = pack.cols
+        rows = pack.rows
+    return StlOut(
+        id=stl.id,
+        filename=stl.filename,
+        part_id=stl.part_id,
+        part_sku=stl.part.sku if stl.part else None,
+        notes=stl.notes,
+        file_size_bytes=stl.file_size_bytes,
+        created_at=stl.created_at,
+        bbox_x_mm=stl.bbox_x_mm,
+        bbox_y_mm=stl.bbox_y_mm,
+        bbox_z_mm=stl.bbox_z_mm,
+        triangle_count=stl.triangle_count,
+        copies_per_plate=copies,
+        pack_rotated=rotated,
+        pack_cols=cols,
+        pack_rows=rows,
+        pack_bed_x_mm=automation["pack_bed_x_mm"],
+        pack_bed_y_mm=automation["pack_bed_y_mm"],
+        pack_gap_mm=automation["pack_gap_mm"],
+    )
+
+
 @stl_router.get("", response_model=list[StlOut])
 async def list_stl(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
-    rows = (await db.execute(select(StlFile).order_by(StlFile.created_at.desc()))).scalars().all()
-    return rows
+    rows = (
+        await db.execute(
+            select(StlFile).options(selectinload(StlFile.part)).order_by(StlFile.created_at.desc())
+        )
+    ).scalars().all()
+    automation = await get_automation(db)
+    dirty = False
+    out: list[StlOut] = []
+    for stl in rows:
+        if stl.bbox_x_mm is None:
+            _apply_stl_bounds(stl)
+            dirty = True
+        out.append(_stl_out(stl, automation))
+    if dirty:
+        await db.commit()
+    return out
 
 
 @stl_router.post("/upload", response_model=StlOut)
@@ -194,14 +266,34 @@ async def upload_stl(
     content = await file.read()
     dest = settings.stl_dir / filename
     dest.write_bytes(content)
+    box = bounding_box(content)
+    note = notes.strip() if notes else ""
+    if not note:
+        if box:
+            note = (
+                "Measured for a plate-fit estimate. Print FarmOS does not slice STLs — "
+                "pack copies in your slicer and upload the G-code."
+            )
+        else:
+            note = (
+                "Could not measure this STL. Print FarmOS does not slice models; upload G-code for production."
+            )
     stl = StlFile(
         filename=filename,
         stored_path=str(dest),
         part_id=part_id,
-        notes=notes or "Stored for future automated slicing. Slicing is not run automatically yet.",
+        notes=note,
         file_size_bytes=len(content),
+        bbox_x_mm=box.x_mm if box else None,
+        bbox_y_mm=box.y_mm if box else None,
+        bbox_z_mm=box.z_mm if box else None,
+        triangle_count=box.triangle_count if box else None,
     )
     db.add(stl)
     await db.commit()
-    await db.refresh(stl)
-    return stl
+    stl = (
+        await db.execute(
+            select(StlFile).options(selectinload(StlFile.part)).where(StlFile.id == stl.id)
+        )
+    ).scalar_one()
+    return _stl_out(stl, await get_automation(db))

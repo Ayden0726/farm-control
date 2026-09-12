@@ -71,10 +71,11 @@ The API is on port 8000 (`/docs` for OpenAPI).
 - Create a production run with multiple G-code files and copy counts.
 - Restrict which printers may take that run.
 - The scheduler assigns queued jobs to compatible **idle** printers.
-- When a print finishes, the printer is **Waiting for Bed Clear**. Nothing else starts on that machine until an operator confirms the bed is empty. FarmOS does not assume automatic part ejection.
+- When a print finishes, the printer is **Waiting for Bed Clear**. Nothing else starts on that machine until an operator confirms the bed is empty.
+- **Settings → Automation** has **Assume the printer removes finished parts**, **off by default**. Print FarmOS does not command the print head to knock a part off. Turn this on only if the machine already clears the bed (belt printer, knock-off macro, etc.). Successful prints then go idle and the next job can start. Failed and cancelled prints still wait for bed clear.
+- The queue runs **G-code**, not STLs. Print FarmOS is not a slicer and cannot pack copies onto a plate or write G-code. Upload an STL to get a **grid estimate** (bounding box vs the plate size in Settings). Pack the real plate in OrcaSlicer or PrusaSlicer, then upload that G-code. Filenames such as `RK-FR5-Handle-x4.gcode` tell the queue each plate makes four parts.
 - Pause, resume, reorder, cancel, and move jobs between printers.
 - Job history is permanent (status changes, never deleted).
-- Filenames such as `RK-FR5-Handle-x4.gcode` produce four handles per print.
 
 Printed parts go **Printed → Awaiting QC → Passed / Failed**. Only passed parts become sellable inventory. Failed parts are scrap and can be requeued.
 

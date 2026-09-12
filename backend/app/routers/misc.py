@@ -32,6 +32,7 @@ from app.schemas import (
 )
 from app.services.qr import render_qr_png
 from app.services.woocommerce import woocommerce_configured
+from app.services.farm_settings import get_automation, upsert_automation
 
 notify_router = APIRouter(prefix="/notifications-legacy-removed", tags=["notifications"])
 maint_router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -244,18 +245,7 @@ async def analytics(db: AsyncSession = Depends(get_db), _: User = Depends(get_cu
 
 @settings_router.get("", response_model=SettingsOut)
 async def get_settings_api(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
-    settings = get_settings()
-    company = await db.get(AppSetting, "company_name")
-    return SettingsOut(
-        company_name=(company.value if company else "Print Farm"),
-        woocommerce_url=settings.woocommerce_url,
-        woocommerce_configured=woocommerce_configured(),
-        notify_webhook_configured=bool(settings.notify_webhook_url),
-        simulated_time_scale=settings.simulated_time_scale,
-        filament_low_grams=settings.filament_low_grams,
-        app_version=settings.app_version or "dev",
-        update_command="./update.sh",
-    )
+    return await _settings_out(db)
 
 
 @settings_router.put("", response_model=SettingsOut)
@@ -282,9 +272,21 @@ async def put_settings(
         stored.value = integrations
     else:
         db.add(AppSetting(key="integrations", value=integrations))
+    await upsert_automation(
+        db,
+        auto_part_ejection=payload.auto_part_ejection,
+        pack_bed_x_mm=payload.pack_bed_x_mm,
+        pack_bed_y_mm=payload.pack_bed_y_mm,
+        pack_gap_mm=payload.pack_gap_mm,
+    )
     await db.commit()
+    return await _settings_out(db)
+
+
+async def _settings_out(db: AsyncSession) -> SettingsOut:
     settings = get_settings()
     company = await db.get(AppSetting, "company_name")
+    automation = await get_automation(db)
     return SettingsOut(
         company_name=(company.value if company else "Print Farm"),
         woocommerce_url=settings.woocommerce_url,
@@ -294,6 +296,10 @@ async def put_settings(
         filament_low_grams=settings.filament_low_grams,
         app_version=settings.app_version or "dev",
         update_command="./update.sh",
+        auto_part_ejection=automation["auto_part_ejection"],
+        pack_bed_x_mm=automation["pack_bed_x_mm"],
+        pack_bed_y_mm=automation["pack_bed_y_mm"],
+        pack_gap_mm=automation["pack_gap_mm"],
     )
 
 

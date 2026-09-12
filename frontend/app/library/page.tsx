@@ -2,28 +2,57 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { GCode, Part } from "@/lib/types";
+import type { FarmSettings, GCode, Part, Stl } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDuration, formatGrams } from "@/lib/format";
 import { toast } from "sonner";
+import Link from "next/link";
+
+function mm(n: number | null | undefined) {
+  if (n == null) return "—";
+  return `${n.toFixed(n >= 10 ? 0 : 1)} mm`;
+}
+
+function packLabel(row: Stl) {
+  if (row.bbox_x_mm == null || row.bbox_y_mm == null) {
+    return "Could not measure";
+  }
+  if (row.copies_per_plate == null) return "—";
+  if (row.copies_per_plate <= 0) {
+    return "Does not fit this plate";
+  }
+  const grid =
+    row.pack_cols && row.pack_rows ? `${row.pack_cols}×${row.pack_rows}` : null;
+  return `${row.copies_per_plate}${grid ? ` (${grid})` : ""}${row.pack_rotated ? " · rotated 90°" : ""}`;
+}
 
 export default function LibraryPage() {
   const [files, setFiles] = useState<GCode[]>([]);
+  const [stls, setStls] = useState<Stl[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [partId, setPartId] = useState("");
   const [material, setMaterial] = useState("PETG");
   const [stl, setStl] = useState<File | null>(null);
+  const [pack, setPack] = useState({ x: 220, y: 220, gap: 8 });
 
   async function load() {
-    setFiles(await api<GCode[]>("/api/v1/gcode?include_archived=true"));
-    setParts(await api<Part[]>("/api/v1/parts"));
+    const [gcode, models, partRows, settings] = await Promise.all([
+      api<GCode[]>("/api/v1/gcode?include_archived=true"),
+      api<Stl[]>("/api/v1/stl"),
+      api<Part[]>("/api/v1/parts"),
+      api<FarmSettings>("/api/v1/settings"),
+    ]);
+    setFiles(gcode);
+    setStls(models);
+    setParts(partRows);
+    setPack({ x: settings.pack_bed_x_mm, y: settings.pack_bed_y_mm, gap: settings.pack_gap_mm });
   }
   useEffect(() => {
-    load();
+    load().catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load library"));
   }, []);
 
   async function uploadGcode(e: FormEvent) {
@@ -35,7 +64,7 @@ export default function LibraryPage() {
     body.append("material", material);
     try {
       await api("/api/v1/gcode/upload", { method: "POST", body });
-      toast.success("G-code stored in the library. Filenames like RK-FR5-Handle-x4.gcode set quantity to 4.");
+      toast.success("G-code stored. Filenames like RK-FR5-Handle-x4.gcode set quantity to 4.");
       setFile(null);
       load();
     } catch (err) {
@@ -50,9 +79,16 @@ export default function LibraryPage() {
     body.append("file", stl);
     if (partId) body.append("part_id", partId);
     try {
-      await api("/api/v1/stl/upload", { method: "POST", body });
-      toast.success("STL stored. Automated slicing can be added later without changing this library.");
+      const row = await api<Stl>("/api/v1/stl/upload", { method: "POST", body });
+      if (row.copies_per_plate && row.copies_per_plate > 0) {
+        toast.success(
+          `About ${row.copies_per_plate} copies fit on a ${row.pack_bed_x_mm}×${row.pack_bed_y_mm} mm plate. Slice that layout in Orca/PrusaSlicer, then upload the G-code.`,
+        );
+      } else {
+        toast.success("STL stored. Print FarmOS cannot generate G-code — slice it yourself and upload the result.");
+      }
       setStl(null);
+      load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     }
@@ -64,10 +100,14 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="grid gap-4 md:grid-cols-2">
         <form onSubmit={uploadGcode} className="space-y-3 rounded-xl border border-white/8 p-4">
           <h2 className="font-medium">Upload G-code</h2>
+          <p className="text-xs text-zinc-500">
+            Production uses G-code. Pack as many copies as you want in your slicer, then upload that file. A name
+            ending in <span className="font-mono">-x4</span> tells the queue each plate makes four parts.
+          </p>
           <Input type="file" accept=".gcode,.gco,.g" onChange={(e) => setFile(e.target.files?.[0] || null)} />
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -95,49 +135,97 @@ export default function LibraryPage() {
           </Button>
         </form>
         <form onSubmit={uploadStl} className="space-y-3 rounded-xl border border-white/8 p-4">
-          <h2 className="font-medium">Upload STL (secondary)</h2>
+          <h2 className="font-medium">Upload STL</h2>
           <p className="text-xs text-zinc-500">
-            Stored against a part for future slicing. Packing multiple STLs onto a plate is not required for FarmOS
-            production — use G-code for the queue.
+            Print FarmOS is not a slicer — it cannot write G-code or nest parts on a plate. After upload it measures
+            the model and estimates how many copies fit in a regular grid on the plate size in{" "}
+            <Link href="/settings" className="underline underline-offset-2">
+              Settings
+            </Link>{" "}
+            (currently {pack.x}×{pack.y} mm, {pack.gap} mm gap).
           </p>
           <Input type="file" accept=".stl" onChange={(e) => setStl(e.target.files?.[0] || null)} />
           <Button type="submit" variant="outline" disabled={!stl}>
-            Store STL
+            Measure STL
           </Button>
         </form>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>File</TableHead>
-            <TableHead>Part</TableHead>
-            <TableHead>Qty/file</TableHead>
-            <TableHead>Material</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead>Filament</TableHead>
-            <TableHead>Ver</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {files.map((g) => (
-            <TableRow key={g.id} className={g.is_archived ? "opacity-50" : ""}>
-              <TableCell className="font-mono text-xs">{g.filename}</TableCell>
-              <TableCell>{g.part_sku || "—"}</TableCell>
-              <TableCell>×{g.quantity_per_file}</TableCell>
-              <TableCell>{g.material}</TableCell>
-              <TableCell>{formatDuration(g.estimated_time_seconds)}</TableCell>
-              <TableCell>{formatGrams(g.estimated_filament_grams)}</TableCell>
-              <TableCell>v{g.version}</TableCell>
-              <TableCell>
-                <Button size="xs" variant="outline" onClick={() => archive(g.id, !g.is_archived)}>
-                  {g.is_archived ? "Unarchive" : "Archive"}
-                </Button>
-              </TableCell>
+
+      <div className="space-y-3">
+        <h2 className="text-sm font-medium text-zinc-300">G-code (queue)</h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>File</TableHead>
+              <TableHead>Part</TableHead>
+              <TableHead>Qty/file</TableHead>
+              <TableHead>Material</TableHead>
+              <TableHead>Time</TableHead>
+              <TableHead>Filament</TableHead>
+              <TableHead>Ver</TableHead>
+              <TableHead></TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {files.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-zinc-500">
+                  No G-code yet. Slice a plate in OrcaSlicer or PrusaSlicer and upload it here to queue production.
+                </TableCell>
+              </TableRow>
+            )}
+            {files.map((g) => (
+              <TableRow key={g.id} className={g.is_archived ? "opacity-50" : ""}>
+                <TableCell className="font-mono text-xs">{g.filename}</TableCell>
+                <TableCell>{g.part_sku || "—"}</TableCell>
+                <TableCell>×{g.quantity_per_file}</TableCell>
+                <TableCell>{g.material}</TableCell>
+                <TableCell>{formatDuration(g.estimated_time_seconds)}</TableCell>
+                <TableCell>{formatGrams(g.estimated_filament_grams)}</TableCell>
+                <TableCell>v{g.version}</TableCell>
+                <TableCell>
+                  <Button size="xs" variant="outline" onClick={() => archive(g.id, !g.is_archived)}>
+                    {g.is_archived ? "Unarchive" : "Archive"}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-sm font-medium text-zinc-300">STLs (estimate only)</h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>File</TableHead>
+              <TableHead>Part</TableHead>
+              <TableHead>Size (X×Y×Z)</TableHead>
+              <TableHead>Copies on plate</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {stls.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-zinc-500">
+                  No STLs stored. Upload a model to see a grid estimate — then still slice and upload G-code to print.
+                </TableCell>
+              </TableRow>
+            )}
+            {stls.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell className="font-mono text-xs">{row.filename}</TableCell>
+                <TableCell>{row.part_sku || "—"}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {mm(row.bbox_x_mm)} × {mm(row.bbox_y_mm)} × {mm(row.bbox_z_mm)}
+                </TableCell>
+                <TableCell>{packLabel(row)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -55,6 +55,12 @@ TABLE_COLUMNS = {
     "gcode_files": {
         "required_color": "VARCHAR(80) DEFAULT ''",
     },
+    "stl_files": {
+        "bbox_x_mm": "DOUBLE PRECISION",
+        "bbox_y_mm": "DOUBLE PRECISION",
+        "bbox_z_mm": "DOUBLE PRECISION",
+        "triangle_count": "INTEGER",
+    },
 }
 
 

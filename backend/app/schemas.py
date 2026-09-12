@@ -154,9 +154,21 @@ class StlOut(BaseModel):
     id: UUID
     filename: str
     part_id: UUID | None
+    part_sku: str | None = None
     notes: str
     file_size_bytes: int
     created_at: datetime
+    bbox_x_mm: float | None = None
+    bbox_y_mm: float | None = None
+    bbox_z_mm: float | None = None
+    triangle_count: int | None = None
+    copies_per_plate: int | None = None
+    pack_rotated: bool = False
+    pack_cols: int | None = None
+    pack_rows: int | None = None
+    pack_bed_x_mm: float | None = None
+    pack_bed_y_mm: float | None = None
+    pack_gap_mm: float | None = None
 
 
 class BomItemIn(BaseModel):
@@ -445,6 +457,10 @@ class SettingsOut(BaseModel):
     filament_low_grams: float
     app_version: str = "dev"
     update_command: str = "./update.sh"
+    auto_part_ejection: bool = False
+    pack_bed_x_mm: float = 220.0
+    pack_bed_y_mm: float = 220.0
+    pack_gap_mm: float = 8.0
 
 
 class SettingsIn(BaseModel):
@@ -453,3 +469,7 @@ class SettingsIn(BaseModel):
     woocommerce_key: str | None = None
     woocommerce_secret: str | None = None
     notify_webhook_url: str | None = None
+    auto_part_ejection: bool | None = None
+    pack_bed_x_mm: float | None = Field(default=None, gt=0, le=2000)
+    pack_bed_y_mm: float | None = Field(default=None, gt=0, le=2000)
+    pack_gap_mm: float | None = Field(default=None, ge=0, le=100)

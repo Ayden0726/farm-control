@@ -210,6 +210,10 @@ class StlFile(TimestampMixin, Base):
     part_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("parts.id"), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    bbox_x_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bbox_y_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bbox_z_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    triangle_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     part: Mapped[Part | None] = relationship(back_populates="stl_files")
 

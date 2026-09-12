@@ -29,6 +29,7 @@ from app.models import (
     QcStatus,
     utcnow,
 )
+from app.services.farm_settings import auto_part_ejection_enabled
 from app.services.notifications import NotifyContext, notify, print_complete_copy, recently_notified
 
 async def _ctx_for_job(db: AsyncSession, job: PrintJob, printer: Printer) -> NotifyContext:
@@ -69,8 +70,21 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
     job.completed_at = now
     job.progress_percent = 100 if not failed else job.progress_percent
     printer.current_job_id = None
-    printer.status = PrinterStatus.waiting_for_bed_clear
-    printer.progress_percent = 100 if not failed else printer.progress_percent
+    assume_ejection = (not failed) and await auto_part_ejection_enabled(db)
+    extra = dict(printer.extra_config or {})
+    extra.setdefault("sim", {})
+    if assume_ejection:
+        printer.status = PrinterStatus.idle
+        printer.current_file = None
+        printer.progress_percent = 0
+        extra["sim"]["status"] = "idle"
+        extra["sim"]["progress_percent"] = 0
+        extra["sim"]["current_file"] = None
+    else:
+        printer.status = PrinterStatus.waiting_for_bed_clear
+        printer.progress_percent = 100 if not failed else printer.progress_percent
+        extra["sim"]["status"] = "waiting_for_bed_clear"
+    printer.extra_config = extra
     printer.time_remaining_seconds = 0
     duration = int(_elapsed_print_seconds(job, now))
     printer.total_print_seconds += duration
@@ -154,6 +168,7 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
         job.quantity_produced,
         duration,
         now,
+        assume_ejection=assume_ejection,
     )
     await notify(
         db,
@@ -164,20 +179,21 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
         entity_id=job.id,
         ctx=ctx,
     )
-    await notify(
-        db,
-        NotificationType.bed_needs_clearing,
-        f"{printer.name} — Bed needs clearing",
-        (
-            f"{ctx.job_label} is finished on {printer.name}.\n\n"
-            "Status: Waiting for Bed Clear\n"
-            "Confirm the bed is empty to release the next queued job."
-        ),
-        severity="warning",
-        entity_type="printer",
-        entity_id=printer.id,
-        ctx=ctx,
-    )
+    if not assume_ejection:
+        await notify(
+            db,
+            NotificationType.bed_needs_clearing,
+            f"{printer.name} — Bed needs clearing",
+            (
+                f"{ctx.job_label} is finished on {printer.name}.\n\n"
+                "Status: Waiting for Bed Clear\n"
+                "Confirm the bed is empty to release the next queued job."
+            ),
+            severity="warning",
+            entity_type="printer",
+            entity_id=printer.id,
+            ctx=ctx,
+        )
     if job.production_run_id:
         await maybe_complete_run(db, job.production_run_id)
 

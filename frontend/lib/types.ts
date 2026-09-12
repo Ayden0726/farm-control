@@ -124,6 +124,41 @@ export type GCode = {
   compatible_printer_ids: string[];
 };
 
+export type Stl = {
+  id: string;
+  filename: string;
+  part_id: string | null;
+  part_sku: string | null;
+  notes: string;
+  file_size_bytes: number;
+  created_at: string;
+  bbox_x_mm: number | null;
+  bbox_y_mm: number | null;
+  bbox_z_mm: number | null;
+  triangle_count: number | null;
+  copies_per_plate: number | null;
+  pack_rotated: boolean;
+  pack_cols: number | null;
+  pack_rows: number | null;
+  pack_bed_x_mm: number | null;
+  pack_bed_y_mm: number | null;
+  pack_gap_mm: number | null;
+};
+
+export type FarmSettings = {
+  company_name: string;
+  woocommerce_url: string;
+  woocommerce_configured: boolean;
+  notify_webhook_configured: boolean;
+  simulated_time_scale: number;
+  app_version: string;
+  update_command: string;
+  auto_part_ejection: boolean;
+  pack_bed_x_mm: number;
+  pack_bed_y_mm: number;
+  pack_gap_mm: number;
+};
+
 export type Spool = {
   id: string;
   name: string;

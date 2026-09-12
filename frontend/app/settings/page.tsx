@@ -3,21 +3,15 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { PhoneNotificationSettings } from "@/components/phone-notification-settings";
+import type { FarmSettings } from "@/lib/types";
 
-type Settings = {
-  company_name: string;
-  woocommerce_url: string;
-  woocommerce_configured: boolean;
-  notify_webhook_configured: boolean;
-  simulated_time_scale: number;
-  app_version: string;
-  update_command: string;
-};
+type Settings = FarmSettings;
 
 type UpdateStatus = {
   available: boolean;
@@ -33,6 +27,11 @@ export default function SettingsPage() {
   const [wooUrl, setWooUrl] = useState("");
   const [wooKey, setWooKey] = useState("");
   const [wooSecret, setWooSecret] = useState("");
+  const [autoEject, setAutoEject] = useState(false);
+  const [bedX, setBedX] = useState("220");
+  const [bedY, setBedY] = useState("220");
+  const [gap, setGap] = useState("8");
+  const [savingAutomation, setSavingAutomation] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -43,6 +42,10 @@ export default function SettingsPage() {
         setSettings(s);
         setCompany(s.company_name);
         setWooUrl(s.woocommerce_url);
+        setAutoEject(Boolean(s.auto_part_ejection));
+        setBedX(String(s.pack_bed_x_mm ?? 220));
+        setBedY(String(s.pack_bed_y_mm ?? 220));
+        setGap(String(s.pack_gap_mm ?? 8));
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load settings"));
   }, []);
@@ -152,6 +155,82 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </form>
+      <Card>
+        <CardHeader>
+          <CardTitle>Automation</CardTitle>
+          <CardDescription>
+            Off by default. Print FarmOS does not drive the nozzle to knock a part off — turn this on only when the
+            printer already clears the bed (belt, purge-line knock-off, or a macro you run yourself).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="flex items-start justify-between gap-4 rounded-lg border border-white/8 bg-white/3 px-3 py-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Assume the printer removes finished parts</div>
+              <p className="text-xs text-zinc-500">
+                When on, a successful print leaves the machine idle so the next queued job can start immediately. Failed
+                prints still wait for an operator to confirm the bed is empty. Cancelled jobs also still wait.
+              </p>
+            </div>
+            <Switch checked={autoEject} onCheckedChange={setAutoEject} />
+          </label>
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Default plate size (STL estimate)</div>
+            <p className="text-xs text-zinc-500">
+              Used only to guess how many copies of an uploaded STL fit in a regular grid. Changing this does not slice
+              or generate G-code.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label>Bed X (mm)</Label>
+                <Input inputMode="decimal" value={bedX} onChange={(e) => setBedX(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Bed Y (mm)</Label>
+                <Input inputMode="decimal" value={bedY} onChange={(e) => setBedY(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Gap (mm)</Label>
+                <Input inputMode="decimal" value={gap} onChange={(e) => setGap(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <Button
+            type="button"
+            disabled={savingAutomation}
+            onClick={async () => {
+              setSavingAutomation(true);
+              try {
+                const res = await api<Settings>("/api/v1/settings", {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    auto_part_ejection: autoEject,
+                    pack_bed_x_mm: Number(bedX),
+                    pack_bed_y_mm: Number(bedY),
+                    pack_gap_mm: Number(gap),
+                  }),
+                });
+                setSettings(res);
+                setAutoEject(res.auto_part_ejection);
+                setBedX(String(res.pack_bed_x_mm));
+                setBedY(String(res.pack_bed_y_mm));
+                setGap(String(res.pack_gap_mm));
+                toast.success(
+                  res.auto_part_ejection
+                    ? "Automatic part removal assumed. Successful prints will not wait for bed clear."
+                    : "Bed-clear confirmation stays required after each print.",
+                );
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed to save automation");
+              } finally {
+                setSavingAutomation(false);
+              }
+            }}
+          >
+            {savingAutomation ? "Saving…" : "Save automation"}
+          </Button>
+        </CardContent>
+      </Card>
       <PhoneNotificationSettings />
       <Card>
         <CardHeader>
