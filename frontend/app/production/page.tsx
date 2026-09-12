@@ -101,7 +101,14 @@ export default function ProductionPage() {
                       const match = gcode.find((g) => g.part_id === partId);
                       setItems((cur) =>
                         cur.map((c, i) =>
-                          i === idx ? { ...c, part_id: partId, gcode_file_id: match?.id || "" } : c,
+                          i === idx
+                            ? {
+                                ...c,
+                                part_id: partId,
+                                gcode_file_id: match?.id || "",
+                                required_qty: match?.quantity_per_file || c.required_qty,
+                              }
+                            : c,
                         ),
                       );
                     }}
@@ -116,9 +123,21 @@ export default function ProductionPage() {
                   <select
                     className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
                     value={item.gcode_file_id}
-                    onChange={(e) =>
-                      setItems((cur) => cur.map((c, i) => (i === idx ? { ...c, gcode_file_id: e.target.value } : c)))
-                    }
+                    onChange={(e) => {
+                      const gcodeId = e.target.value;
+                      const match = gcode.find((g) => g.id === gcodeId);
+                      setItems((cur) =>
+                        cur.map((c, i) =>
+                          i === idx
+                            ? {
+                                ...c,
+                                gcode_file_id: gcodeId,
+                                required_qty: match?.quantity_per_file || c.required_qty,
+                              }
+                            : c,
+                        ),
+                      );
+                    }}
                   >
                     <option value="">G-code…</option>
                     {gcode

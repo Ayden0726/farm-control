@@ -17,16 +17,21 @@ def new_qr_token() -> str:
     return secrets.token_urlsafe(12).replace("-", "").replace("_", "")[:16].lower()
 
 
+_QTY_IN_NAME = re.compile(r"(?:^|[\s._-])x(\d+)(?=$|[\s._-])", re.IGNORECASE)
+
+
 def parse_quantity_from_filename(filename: str) -> int:
-    """Recognise patterns like RK-FR5-Handle-x4.gcode or RK-FR5-Handle_x4.gcode."""
+    """How many of one part this plate prints.
+
+    Reads x<number> in the file name, e.g. RK-FR5-Handle-x4.gcode,
+    Handle_x8.gcode, Bracket-x4-PETG.gcode, or x12-plate.gcode.
+    """
     stem = Path(filename).stem
-    match = re.search(r"[_-]x(\d+)$", stem, re.IGNORECASE)
-    if match:
-        return max(1, int(match.group(1)))
-    match = re.search(r"x(\d+)$", stem, re.IGNORECASE)
-    if match:
-        return max(1, int(match.group(1)))
-    return 1
+    matches = list(_QTY_IN_NAME.finditer(stem))
+    if not matches:
+        return 1
+    n = int(matches[-1].group(1))
+    return max(1, min(n, 999))
 
 
 def parse_gcode_metadata(content: str) -> dict[str, float | int]:

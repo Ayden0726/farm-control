@@ -93,6 +93,7 @@ async def upload_gcode(
     material: str = Form("PETG"),
     notes: str = Form(""),
     compatible_printer_ids: str = Form(""),
+    quantity_per_file: int | None = Form(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -107,7 +108,11 @@ async def upload_gcode(
     except Exception:
         text = ""
     meta = parse_gcode_metadata(text)
-    qty = parse_quantity_from_filename(filename)
+    parsed = parse_quantity_from_filename(filename)
+    if quantity_per_file is not None:
+        qty = max(1, min(int(quantity_per_file), 999))
+    else:
+        qty = parsed
     version = 1
     existing = (
         await db.execute(

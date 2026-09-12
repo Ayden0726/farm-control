@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatDuration, formatGrams } from "@/lib/format";
 import { toast } from "sonner";
 import Link from "next/link";
+import { parseQuantityFromFilename } from "@/lib/gcode";
 
 function mm(n: number | null | undefined) {
   if (n == null) return "—";
@@ -34,6 +35,7 @@ export default function LibraryPage() {
   const [stls, setStls] = useState<Stl[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [qty, setQty] = useState(1);
   const [partId, setPartId] = useState("");
   const [material, setMaterial] = useState("PETG");
   const [stl, setStl] = useState<File | null>(null);
@@ -66,10 +68,17 @@ export default function LibraryPage() {
     body.append("file", file);
     if (partId) body.append("part_id", partId);
     body.append("material", material);
+    body.append("quantity_per_file", String(Math.max(1, qty)));
     try {
-      await api("/api/v1/gcode/upload", { method: "POST", body });
-      toast.success("G-code stored. Filenames like RK-FR5-Handle-x4.gcode set quantity to 4.");
+      const row = await api<GCode>("/api/v1/gcode/upload", { method: "POST", body });
+      const n = row.quantity_per_file;
+      toast.success(
+        n > 1
+          ? `${row.filename} stored — quantity ${n} (${n} of this part on each plate).`
+          : `${row.filename} stored — quantity 1 (one part per plate).`,
+      );
       setFile(null);
+      setQty(1);
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -115,10 +124,26 @@ export default function LibraryPage() {
         <form onSubmit={uploadGcode} className="space-y-3 rounded-xl border border-white/8 p-4">
           <h2 className="font-medium">Upload G-code</h2>
           <p className="text-xs text-zinc-500">
-            Production uses G-code. Pack as many copies as you want in your slicer, then upload that file. A name
-            ending in <span className="font-mono">-x4</span> tells the queue each plate makes four parts.
+            Production uses G-code. Pack as many copies as you want in your slicer, then upload that file. If the name
+            has <span className="font-mono">x4</span>, <span className="font-mono">x8</span>, or any{" "}
+            <span className="font-mono">x</span>
+            +number, quantity is set to that many of this part on the plate.
           </p>
-          <Input type="file" accept=".gcode,.gco,.g" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          <Input
+            type="file"
+            accept=".gcode,.gco,.g"
+            onChange={(e) => {
+              const next = e.target.files?.[0] || null;
+              setFile(next);
+              if (next) setQty(parseQuantityFromFilename(next.name));
+            }}
+          />
+          {file && (
+            <p className="text-sm text-amber-200">
+              {file.name}
+              {qty > 1 ? ` — this plate makes ${qty} of this part` : " — one part per plate (no x-number in the name)"}
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label>Part</Label>
@@ -136,9 +161,20 @@ export default function LibraryPage() {
               </select>
             </div>
             <div>
-              <Label>Material</Label>
-              <Input value={material} onChange={(e) => setMaterial(e.target.value)} />
+              <Label>Quantity (parts on this plate)</Label>
+              <Input
+                className="h-12 text-lg md:h-8 md:text-sm"
+                type="number"
+                min={1}
+                max={999}
+                value={qty}
+                onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+              />
             </div>
+          </div>
+          <div>
+            <Label>Material</Label>
+            <Input value={material} onChange={(e) => setMaterial(e.target.value)} />
           </div>
           <Button type="submit" disabled={!file}>
             Add to library
@@ -190,7 +226,20 @@ export default function LibraryPage() {
               <TableRow className={g.is_archived ? "opacity-50" : ""}>
                 <TableCell className="font-mono text-xs">{g.filename}</TableCell>
                 <TableCell>{g.part_sku || "—"}</TableCell>
-                <TableCell>×{g.quantity_per_file}</TableCell>
+                <TableCell>
+                  <Input
+                    className="h-9 w-20 font-mono"
+                    type="number"
+                    min={1}
+                    max={999}
+                    defaultValue={g.quantity_per_file}
+                    key={`${g.id}-${g.quantity_per_file}`}
+                    onBlur={(e) => {
+                      const n = Math.max(1, Number(e.target.value) || 1);
+                      if (n !== g.quantity_per_file) saveGcode(g, { quantity_per_file: n });
+                    }}
+                  />
+                </TableCell>
                 <TableCell>{g.material}</TableCell>
                 <TableCell>{formatDuration(g.estimated_time_seconds)}</TableCell>
                 <TableCell>{formatGrams(g.estimated_filament_grams)}</TableCell>
