@@ -210,6 +210,9 @@ def upgrade_schema(conn: Connection) -> None:
         _add_unique_index(conn, "orders", "shopify_id", "ux_orders_shopify_id")
     if "production_runs" in tables:
         _add_unique_index(conn, "production_runs", "batch_code", "ux_production_runs_batch_code")
+        run_cols = {c["name"] for c in inspect(conn).get_columns("production_runs")}
+        if "product_id" in run_cols:
+            conn.execute(text("ALTER TABLE production_runs ALTER COLUMN product_id DROP NOT NULL"))
     if "purchase_order_lines" in tables:
         conn.execute(text("ALTER TABLE purchase_order_lines ALTER COLUMN product_id DROP NOT NULL"))
     _add_enum_value(conn, "userrole", "packing")
