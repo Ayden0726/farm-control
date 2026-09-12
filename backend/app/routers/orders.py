@@ -75,6 +75,7 @@ def _order_out(order: Order) -> OrderOut:
         carrier=getattr(order, "carrier", "") or "",
         tracking_number=getattr(order, "tracking_number", "") or "",
         due_at=getattr(order, "due_at", None),
+        shipping_address=getattr(order, "shipping_address", None) if isinstance(getattr(order, "shipping_address", None), dict) else None,
     )
 
 

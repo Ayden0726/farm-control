@@ -523,6 +523,7 @@ class OrderOut(BaseModel):
     carrier: str = ""
     tracking_number: str = ""
     due_at: datetime | None = None
+    shipping_address: dict | None = None
 
 
 class NotificationOut(BaseModel):

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -120,6 +121,9 @@ export default function PackingOrderPage() {
           <Button className="md:col-span-3" onClick={ship} disabled={!carrier || !tracking}>
             Record shipment
           </Button>
+          <Link href="/shipping" className={buttonVariants({ variant: "outline" }) + " md:col-span-3"}>
+            Print shipping label
+          </Link>
         </CardContent>
       </Card>
     </div>

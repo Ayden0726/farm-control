@@ -44,6 +44,9 @@ async def import_woocommerce_payload(db: AsyncSession, payload: dict[str, Any]) 
         await db.execute(select(Order).where(Order.woocommerce_id == woo_id))
     ).scalar_one_or_none()
     if existing:
+        from app.services.shipping import apply_store_shipping_address
+
+        apply_store_shipping_address(existing, payload, "woocommerce")
         return existing
     billing = payload.get("billing") or {}
     customer = f"{billing.get('first_name', '')} {billing.get('last_name', '')}".strip() or payload.get(
@@ -65,8 +68,10 @@ async def import_woocommerce_payload(db: AsyncSession, payload: dict[str, Any]) 
     db.add(order)
     await db.flush()
     from app.services.codes import next_order_code
+    from app.services.shipping import apply_store_shipping_address
 
     order.public_code = await next_order_code(db, order.reference)
+    apply_store_shipping_address(order, payload, "woocommerce")
     for item in payload.get("line_items") or []:
         sku = (item.get("sku") or "").strip()
         product = None

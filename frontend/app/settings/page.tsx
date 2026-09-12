@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { PhoneNotificationSettings } from "@/components/phone-notification-settings";
+import { ShippingSettingsCard } from "@/components/shipping-settings";
 import type { FarmSettings } from "@/lib/types";
 
 type Settings = FarmSettings;
@@ -248,6 +249,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </form>
+      <ShippingSettingsCard />
       <Card>
         <CardHeader>
           <CardTitle>Automation</CardTitle>

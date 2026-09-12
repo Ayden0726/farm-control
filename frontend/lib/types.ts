@@ -257,6 +257,18 @@ export type Order = {
   tracking_number?: string;
   due_at?: string | null;
   shopify_id?: string | null;
+  shipping_address?: {
+    name?: string;
+    business_name?: string;
+    lines?: string[];
+    suburb?: string;
+    state?: string;
+    postcode?: string;
+    phone?: string;
+    email?: string;
+    country?: string;
+    source?: string;
+  } | null;
 };
 
 export type Product = {

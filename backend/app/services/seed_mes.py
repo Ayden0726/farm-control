@@ -38,6 +38,9 @@ async def ensure_mes_defaults(db: AsyncSession) -> None:
 
     await ensure_default_rules(db)
     await _backfill_order_codes(db)
+    from app.services.shipping import backfill_demo_shipping_addresses
+
+    await backfill_demo_shipping_addresses(db)
     await db.flush()
 
 

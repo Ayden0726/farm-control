@@ -599,6 +599,7 @@ class Order(TimestampMixin, Base):
     carrier: Mapped[str] = mapped_column(String(80), default="")
     tracking_number: Mapped[str] = mapped_column(String(120), default="")
     public_code: Mapped[str | None] = mapped_column(String(40), unique=True, index=True, nullable=True)
+    shipping_address: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     lines: Mapped[list[OrderLine]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
@@ -607,6 +608,7 @@ class Order(TimestampMixin, Base):
         back_populates="order", cascade="all, delete-orphan"
     )
     production_run: Mapped[ProductionRun | None] = relationship()
+    shipments: Mapped[list["Shipment"]] = relationship(back_populates="order")
 
 
 class OrderLine(Base):
@@ -1148,8 +1150,18 @@ class Shipment(TimestampMixin, Base):
     label_url: Mapped[str] = mapped_column(String(500), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    service: Mapped[str] = mapped_column(String(80), default="")
+    consignment_id: Mapped[str] = mapped_column(String(120), default="")
+    auspost_shipment_id: Mapped[str] = mapped_column(String(120), default="")
+    auspost_label_id: Mapped[str] = mapped_column(String(120), default="")
+    weight_g: Mapped[float] = mapped_column(Float, default=0)
+    length_cm: Mapped[float] = mapped_column(Float, default=0)
+    width_cm: Mapped[float] = mapped_column(Float, default=0)
+    height_cm: Mapped[float] = mapped_column(Float, default=0)
+    payload_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    label_path: Mapped[str] = mapped_column(String(500), default="")
 
-    order: Mapped[Order] = relationship()
+    order: Mapped[Order] = relationship(back_populates="shipments")
 
 
 class BackupRecord(TimestampMixin, Base):

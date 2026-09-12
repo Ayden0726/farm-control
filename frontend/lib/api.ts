@@ -120,6 +120,51 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const headers = new Headers(init.headers);
+  const t = token();
+  if (t) headers.set("Authorization", `Bearer ${t}`);
+  const doFetch = typeof window !== "undefined" ? window.fetch.bind(window) : fetch;
+  const urls = requestUrls(path);
+  let res: Response | null = null;
+  let lastError: unknown;
+  for (const url of urls) {
+    try {
+      const attempt = await doFetch(url, {
+        ...init,
+        headers,
+        cache: "no-store",
+        signal: init.signal ?? AbortSignal.timeout(30000),
+      });
+      res = attempt;
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!res) {
+    throw new ApiError(503, lastError instanceof Error ? lastError.message : "Cannot reach the farm API.");
+  }
+  if (res.status === 401 && typeof window !== "undefined") {
+    const here = window.location.pathname;
+    if (here !== "/login" && here !== "/setup") {
+      setToken(null);
+      window.location.href = "/login";
+    }
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const parsed = parseDetail(await res.json());
+      detail = parsed.detail;
+    } catch {
+      /* keep status text */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return res.blob();
+}
+
 export type AuthUser = {
   access_token: string;
   role: string;

@@ -386,6 +386,19 @@ async def seed_demo(db: AsyncSession) -> None:
         woocommerce_id=1042,
         status=OrderStatus.ready_to_ship,
         shipping_status="unfulfilled",
+        packing_status="packed",
+        shipping_address={
+            "name": "Northline Studio",
+            "business_name": "Northline Studio",
+            "lines": ["48 Gertrude Street"],
+            "suburb": "Fitzroy",
+            "state": "VIC",
+            "postcode": "3065",
+            "phone": "0390001042",
+            "email": "ops@northline.example",
+            "country": "AU",
+            "source": "woocommerce",
+        },
     )
     db.add(ready_order)
     await db.flush()
@@ -413,6 +426,18 @@ async def seed_demo(db: AsyncSession) -> None:
         woocommerce_id=1048,
         status=OrderStatus.in_production,
         production_run_id=run.id,
+        shipping_address={
+            "name": "Harbour Makerspace",
+            "business_name": "Harbour Makerspace",
+            "lines": ["12 Darling Drive"],
+            "suburb": "Sydney",
+            "state": "NSW",
+            "postcode": "2000",
+            "phone": "0290001048",
+            "email": "shop@harbour.example",
+            "country": "AU",
+            "source": "woocommerce",
+        },
     )
     db.add(waiting_order)
     await db.flush()

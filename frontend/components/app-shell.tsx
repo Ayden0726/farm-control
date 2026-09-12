@@ -23,6 +23,7 @@ import {
   Menu,
   CalendarClock,
   PackageCheck,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ const NAV = [
   { href: "/hardware", label: "Hardware", icon: Package },
   { href: "/kits", label: "Kitting", icon: PackageCheck },
   { href: "/packing", label: "Packing", icon: PackageCheck },
+  { href: "/shipping", label: "Shipping", icon: Truck },
   { href: "/filament", label: "Filament", icon: Package },
   { href: "/scan", label: "Scan", icon: ScanLine },
   { href: "/orders", label: "Orders", icon: ShoppingCart },

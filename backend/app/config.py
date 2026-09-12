@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     shopify_access_token: str = ""
     shopify_webhook_secret: str = ""
     shopify_api_version: str = "2024-10"
+    auspost_api_key: str = ""
+    auspost_password: str = ""
+    auspost_account_number: str = ""
+    auspost_sandbox: bool = True
+    auspost_base_url: str = ""
     public_app_url: str = "http://127.0.0.1:43123"
     app_version: str = "dev"
     update_control_dir: Path = Path("/update-control")
@@ -76,6 +81,10 @@ class Settings(BaseSettings):
     def snapshots_dir(self) -> Path:
         return self.upload_dir / "snapshots"
 
+    @property
+    def shipping_labels_dir(self) -> Path:
+        return self.upload_dir / "shipping_labels"
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -87,6 +96,7 @@ def get_settings() -> Settings:
         settings.qc_dir,
         settings.backup_dir,
         settings.snapshots_dir,
+        settings.shipping_labels_dir,
     ):
         try:
             path.mkdir(parents=True, exist_ok=True)

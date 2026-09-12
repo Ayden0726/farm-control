@@ -91,7 +91,7 @@ FarmOS plans production from open orders, BOMs, reserved inventory, the print qu
 5. Passed parts land in finished-part **bins**. Scan a `BIN-` QR to open the bin.
 6. When all printed and purchased BOM lines are available, **Kitting** shows **Kit Ready**. Reserve into a `KIT-` batch.
 7. **Packing station** confirms every line (or override, which is audited) then **Ready to ship**. Scan an `ORDER-` QR to open packing.
-8. Record carrier + tracking. WooCommerce is updated when that integration is configured.
+8. **Shipping** prints a FarmOS label from the store address, or an official Australia Post label when credentials are set. Recording carrier + tracking on Packing still updates WooCommerce/Shopify.
 
 Hardware, packaging, and consumables are added as you buy them: **Hardware → New hardware SKU**, then **Add pcs** when a box arrives (pieces, not grams). Delete a SKU from the list or the profile. FarmOS does not preload a fastener catalog. Reorder modes match filament (off by default on new SKUs). Costing uses filament price, optional electricity ($/kWh × printer watts × hours), failure allowance, machine time, and hardware. Compatibility checks (nozzle, material, bed) block automatic assignment unless an administrator overrides.
 
@@ -148,6 +148,44 @@ Manual pull: Orders page → Sync Shopify.
 
 Line items match **SKU first**, then the product's **Shopify product ID**. Cancelled Shopify orders are ignored. Shipping a FarmOS order with a Shopify ID pushes tracking to Shopify fulfillments, and falls back to an order note if fulfillment is not available.
 
+Demo login after first-run setup with sample data: `ops@rackkit.local` / `rackkitfarm`.
+
+## Shipping labels
+
+The **Shipping** tab lists orders that can ship (packed / ready-to-ship, plus other open store orders). The to-address is the WooCommerce or Shopify shipping address captured when the order is synced.
+
+Two label paths:
+
+1. **Print FarmOS label** — always available. Print-ready A6 or A4 with from/to, order number, contents, and a barcode of the order public code. No Australia Post account required. This is the shop-floor fallback.
+2. **Create Australia Post label** — when credentials are configured, FarmOS calls the official Shipping and Tracking REST API (create shipment → create labels → fetch PDF). Tracking and consignment IDs are stored on the order/shipment. Download or print the official PDF.
+
+Missing AusPost credentials never block the UI. The official button explains that Settings still needs an API key, password, and account number.
+
+### Australia Post credentials
+
+Official API (not a third-party wrapper):
+
+- Docs: Australia Post Shipping and Tracking REST API
+- Test: `https://digitalapi.auspost.com.au/test/shipping/v1/`
+- Live: `https://digitalapi.auspost.com.au/shipping/v1/`
+- Auth: HTTP Basic (API key : password) plus `Account-Number` header
+
+Save them in **Settings → Australia Post shipping**, or as optional env overrides:
+
+```
+AUSPOST_API_KEY=
+AUSPOST_PASSWORD=
+AUSPOST_ACCOUNT_NUMBER=
+AUSPOST_SANDBOX=true
+AUSPOST_BASE_URL=
+```
+
+`AUSPOST_SANDBOX=true` uses the test host. Set it false for live. Env values win over Settings when both are set. Secrets are encrypted at rest and masked on GET.
+
+Ship-from name, street, suburb, state (NSW/VIC/QLD/SA/WA/TAS/NT/ACT), 4-digit postcode, phone, and email are required for official labels. Default service is Parcel Post (`AUS_PARCEL_REGULAR`) or Express Post (`AUS_PARCEL_EXPRESS`). Package weight defaults from printed-part grams when known, otherwise 500 g; operators can edit length/width/height per consignment.
+
+Domestic AU only in this slice. Invalid postcode, missing suburb/state, or HTTP 401 are returned as clear errors — FarmOS does not invent tracking numbers that look like real AusPost consignments.
+
 ## Environment
 
 `./install.sh` fills the required keys. To configure by hand instead:
@@ -163,7 +201,7 @@ Important keys:
 - `SECRET_KEY` — JWT and credential encryption
 - `POSTGRES_PASSWORD`
 - `SIMULATED_TIME_SCALE` — demo printers run faster than wall clock
-- WooCommerce, Shopify, and SMTP / `NOTIFY_WEBHOOK_URL` as needed
+- WooCommerce, Shopify, Australia Post, and SMTP / `NOTIFY_WEBHOOK_URL` as needed
 - Phone push: `NTFY_*`, `PUBLIC_APP_URL`, optional Pushover / Discord / Telegram / Twilio
 
 ## Phone notifications

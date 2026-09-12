@@ -141,6 +141,9 @@ async def import_shopify_payload(db: AsyncSession, payload: dict[str, Any]) -> O
         await db.execute(select(Order).where(Order.shopify_id == shopify_id))
     ).scalar_one_or_none()
     if existing:
+        from app.services.shipping import apply_store_shipping_address
+
+        apply_store_shipping_address(existing, payload, "shopify")
         return existing
     reference = str(payload.get("name") or payload.get("order_number") or f"SH-{shopify_id}")
     order = Order(
@@ -159,8 +162,10 @@ async def import_shopify_payload(db: AsyncSession, payload: dict[str, Any]) -> O
     db.add(order)
     await db.flush()
     from app.services.codes import next_order_code
+    from app.services.shipping import apply_store_shipping_address
 
     order.public_code = await next_order_code(db, order.reference)
+    apply_store_shipping_address(order, payload, "shopify")
     for item in payload.get("line_items") or []:
         product = await _match_product(db, item)
         if not product:
