@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/api";
 import { QrCode } from "lucide-react";
 
 export function QrDialog({ kind, token, label }: { kind: string; token: string; label: string }) {
@@ -17,7 +17,7 @@ export function QrDialog({ kind, token, label }: { kind: string; token: string; 
         </DialogHeader>
         <div className="flex flex-col items-center gap-3 py-2">
           <img
-            src={`/api/v1/qr/${kind}/${token}`}
+            src={apiUrl(`/api/v1/qr/${kind}/${token}`)}
             alt={`${label} QR code`}
             className="size-56 rounded-md bg-white p-3"
           />

@@ -3,7 +3,7 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { api, AuthUser, setToken } from "@/lib/api";
+import { api, apiUrl, AuthUser, setToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ function LoginForm() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/v1/setup/status", { cache: "no-store" })
+    fetch(apiUrl("/api/v1/setup/status"), { cache: "no-store" })
       .then(async (r) => {
         const data = await r.json().catch(() => null);
         if (!cancelled && data?.needs_setup) {

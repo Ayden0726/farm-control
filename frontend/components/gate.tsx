@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { getToken } from "@/lib/api";
+import { getToken, apiUrl } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 
 const PUBLIC = new Set(["/login", "/setup"]);
@@ -11,7 +11,7 @@ type SetupStatus = { needs_setup: boolean };
 
 async function readSetupStatus(): Promise<SetupStatus | null> {
   try {
-    const response = await fetch("/api/v1/setup/status", {
+      const response = await fetch(apiUrl("/api/v1/setup/status"), {
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });

@@ -41,6 +41,21 @@ function parseDetail(body: { detail?: unknown }): { detail: string; howToFix: st
   return { detail: "Request failed", howToFix: [] };
 }
 
+export function apiUrl(path: string): string {
+  if (typeof window === "undefined") return path;
+  const { protocol, hostname, port } = window.location;
+  if (port === "3000") {
+    return `${protocol}//${hostname}:8000${path}`;
+  }
+  return path;
+}
+
+function requestUrls(path: string): string[] {
+  if (typeof window === "undefined") return [path];
+  const direct = apiUrl(path);
+  return direct === path ? [path] : [direct, path];
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
@@ -50,12 +65,36 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const t = token();
   if (t) headers.set("Authorization", `Bearer ${t}`);
   const doFetch = typeof window !== "undefined" ? window.fetch.bind(window) : fetch;
-  const res = await doFetch(path, {
-    ...init,
-    headers,
-    cache: "no-store",
-    signal: init.signal ?? AbortSignal.timeout(20000),
-  });
+  const urls = requestUrls(path);
+  let res: Response | null = null;
+  let lastError: unknown;
+  for (const url of urls) {
+    try {
+      const attempt = await doFetch(url, {
+        ...init,
+        headers,
+        cache: "no-store",
+        signal: init.signal ?? AbortSignal.timeout(20000),
+      });
+      const json = (attempt.headers.get("content-type") || "").includes("application/json");
+      if (attempt.status >= 500 && !json && url !== urls[urls.length - 1]) {
+        lastError = new Error("proxy");
+        continue;
+      }
+      res = attempt;
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!res) {
+    throw new ApiError(
+      503,
+      lastError instanceof Error && lastError.message !== "proxy"
+        ? "Cannot reach the farm API on port 8000. In WSL run: docker compose logs backend"
+        : "The farm API did not respond. In WSL run: docker compose logs backend",
+    );
+  }
   if (res.status === 401 && typeof window !== "undefined") {
     const here = window.location.pathname;
     if (here !== "/login" && here !== "/setup") {
@@ -72,8 +111,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       howToFix = parsed.howToFix;
     } catch {
       if (res.status >= 500) {
-        detail =
-          "The farm API did not respond. Wait 15 seconds and try again, or run: docker compose logs backend";
+        detail = "The farm API did not respond. In WSL run: docker compose logs backend";
       }
     }
     throw new ApiError(res.status, detail, howToFix);
