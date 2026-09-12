@@ -406,8 +406,8 @@ export default function LibraryPage() {
             <DialogTitle>Delete {pendingDelete?.filename}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This removes the G-code from the library. Archive keeps it for job history. If any print job already used
-            this file, FarmOS will refuse the delete — archive it instead.
+            This removes the G-code from the library. Archive keeps it for job history. If any print job or production
+            run already used this file, FarmOS will refuse the delete — archive it instead.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setPendingDelete(null)} disabled={deleting}>
