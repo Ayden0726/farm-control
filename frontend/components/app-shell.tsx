@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   Bell,
@@ -27,10 +27,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, getToken, setToken } from "@/lib/api";
+import { setToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { HidScanListener } from "@/components/hid-scan-listener";
+import { NotificationsPopover } from "@/components/notifications-popover";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -65,8 +66,6 @@ const MOBILE_TABS = [
   { href: "/filament", label: "Filament", icon: Package },
 ];
 
-type Note = { id: string; title: string; is_read: boolean; severity: string };
-
 function pathActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
@@ -74,28 +73,7 @@ function pathActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [notes, setNotes] = useState<Note[]>([]);
   const [open, setOpen] = useState(false);
-  const unread = notes.filter((n) => !n.is_read).length;
-
-  useEffect(() => {
-    if (!getToken()) return;
-    let cancel = false;
-    const load = async () => {
-      try {
-        const rows = await api<Note[]>("/api/v1/notifications?unread_only=true");
-        if (!cancel) setNotes(rows);
-      } catch {
-        /* ignore */
-      }
-    };
-    load();
-    const id = setInterval(load, 8000);
-    return () => {
-      cancel = true;
-      clearInterval(id);
-    };
-  }, [pathname]);
 
   const title = useMemo(
     () => NAV.find((n) => pathActive(pathname, n.href))?.label || "FarmOS",
@@ -183,16 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Search className="size-5" />
               </Button>
             </Link>
-            <Link href="/notifications" className="relative">
-              <Button variant="ghost" size="icon" className="size-11 lg:size-8">
-                <Bell className="size-5 lg:size-4" />
-              </Button>
-              {unread > 0 && (
-                <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-zinc-950 lg:-right-0.5 lg:-top-0.5">
-                  {unread > 9 ? "9+" : unread}
-                </span>
-              )}
-            </Link>
+            <NotificationsPopover />
             <Button
               variant="ghost"
               size="icon"

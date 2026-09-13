@@ -8,25 +8,9 @@ import { StatusPill } from "@/components/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { farmNotificationPath, type FarmNotification } from "@/lib/notifications";
 
-type Note = {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
-  severity: string;
-  is_read: boolean;
-  created_at: string;
-  printer_id?: string | null;
-  printer_name?: string | null;
-  job_id?: string | null;
-  job_label?: string | null;
-  production_run_id?: string | null;
-  production_run_name?: string | null;
-  order_id?: string | null;
-  order_reference?: string | null;
-  deep_link?: string | null;
-};
+type Note = FarmNotification;
 
 type Delivery = {
   id: string;
@@ -43,21 +27,6 @@ type Delivery = {
   sent_at: string | null;
   deep_link: string | null;
 };
-
-function farmPath(note: Pick<Note, "printer_id" | "order_id" | "production_run_id" | "job_id" | "deep_link">) {
-  if (note.printer_id) return `/printers/${note.printer_id}`;
-  if (note.order_id) return `/orders/${note.order_id}`;
-  if (note.production_run_id) return `/production/${note.production_run_id}`;
-  if (note.job_id) return "/queue";
-  if (note.deep_link) {
-    try {
-      return new URL(note.deep_link).pathname;
-    } catch {
-      return note.deep_link;
-    }
-  }
-  return null;
-}
 
 export default function NotificationsPage() {
   const [tab, setTab] = useState<"inbox" | "history">("inbox");
@@ -147,7 +116,7 @@ export default function NotificationsPage() {
       )}
       {tab === "inbox" &&
         rows?.map((n) => {
-          const href = farmPath(n);
+          const href = farmNotificationPath(n);
           return (
             <div
               key={n.id}
