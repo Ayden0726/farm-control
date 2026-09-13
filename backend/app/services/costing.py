@@ -457,7 +457,7 @@ async def product_cost(db: AsyncSession, product: Product) -> dict:
     costed = True
     missing = []
     for item in product.bom_items or []:
-        part = item.part or await db.get(Part, item.part_id)
+        part = await db.get(Part, item.part_id)
         if not part:
             continue
         cost = await estimate_part_cost(db, part)
@@ -529,7 +529,7 @@ async def order_profitability(db: AsyncSession, order: Order) -> dict:
     products = []
     costed = True
     for line in order.lines:
-        product = line.product or await db.get(Product, line.product_id)
+        product = await db.get(Product, line.product_id)
         if not product:
             continue
         cost = await product_cost(db, product)
