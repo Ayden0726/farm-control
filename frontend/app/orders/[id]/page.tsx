@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import Link from "next/link";
-import { formatMoney } from "@/lib/format";
+import { formatMoneyKnown } from "@/lib/format";
 import { QrDialog } from "@/components/qr-dialog";
 
 export default function OrderDetailPage() {
@@ -17,9 +17,12 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [profit, setProfit] = useState<{
     revenue: number;
-    estimated_total_cost: number;
-    gross_profit: number;
-    gross_margin_pct: number;
+    estimated_total_cost: number | null;
+    gross_profit: number | null;
+    gross_margin_pct: number | null;
+    manufacturing_cost?: number | null;
+    hardware_cost?: number | null;
+    costed?: boolean;
   } | null>(null);
 
   async function load() {
@@ -120,10 +123,18 @@ export default function OrderDetailPage() {
             <CardTitle>Profitability</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2 text-sm md:grid-cols-4">
-            <div>Revenue {formatMoney(profit.revenue)}</div>
-            <div>Est. cost {formatMoney(profit.estimated_total_cost)}</div>
-            <div>Gross profit {formatMoney(profit.gross_profit)}</div>
-            <div>Margin {profit.gross_margin_pct}%</div>
+            <div>Revenue {formatMoneyKnown(profit.revenue)}</div>
+            <div>
+              Est. cost {profit.costed === false ? "incomplete" : formatMoneyKnown(profit.estimated_total_cost)}
+            </div>
+            <div>Gross profit {profit.costed === false ? "—" : formatMoneyKnown(profit.gross_profit)}</div>
+            <div>Margin {profit.gross_margin_pct != null ? `${profit.gross_margin_pct}%` : "—"}</div>
+            {profit.manufacturing_cost != null || profit.hardware_cost != null ? (
+              <div className="text-xs text-zinc-500 md:col-span-4">
+                Printed parts {formatMoneyKnown(profit.manufacturing_cost)} · hardware{" "}
+                {formatMoneyKnown(profit.hardware_cost)}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       )}

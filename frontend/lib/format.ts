@@ -19,6 +19,26 @@ export function formatMoney(value: number | null | undefined): string {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value || 0);
 }
 
+/** Currency that stays blank when costing has no real number (never pretend $0.00). */
+export function formatMoneyKnown(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value);
+}
+
+export function formatFilamentRate(costPerG: number | null | undefined): string {
+  if (costPerG == null || !(costPerG > 0)) return "—";
+  const perKg = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(costPerG * 1000);
+  const cents = costPerG * 100;
+  return `${perKg}/kg · ${cents.toFixed(2)} ¢/g`;
+}
+
+export function formatGramsKnown(value: number | null | undefined): string {
+  if (value == null || !(value > 0)) return "—";
+  if (value >= 1000) return `${(value / 1000).toFixed(2)} kg`;
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded} g` : `${rounded.toFixed(1)} g`;
+}
+
 export function formatGrams(value: number | null | undefined): string {
   const n = value || 0;
   if (n >= 1000) return `${(n / 1000).toFixed(2)} kg`;

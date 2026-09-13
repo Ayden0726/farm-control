@@ -369,6 +369,14 @@ async def costing_parts(db: AsyncSession = Depends(get_db), _: User = Depends(ge
     return [await estimate_part_cost(db, p) for p in parts]
 
 
+@router.get("/costing/products")
+async def costing_products(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    products = (
+        await db.execute(select(Product).where(Product.is_active.is_(True)).order_by(Product.sku))
+    ).scalars().all()
+    return [await product_cost(db, p) for p in products]
+
+
 @router.get("/costing/products/{product_id}")
 async def costing_product(
     product_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)

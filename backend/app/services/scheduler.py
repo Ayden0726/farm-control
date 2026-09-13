@@ -138,17 +138,6 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
             status=QcStatus.awaiting_qc,
         )
     )
-    if job.part_id:
-        try:
-            from app.models import Part
-            from app.services.costing import estimate_part_cost
-
-            part = await db.get(Part, job.part_id)
-            if part:
-                await estimate_part_cost(db, part, persist=True)
-        except Exception:
-            logger.debug("part cost snapshot failed", exc_info=True)
-
     spool = None
     if printer.assigned_spool_id:
         spool = await db.get(FilamentSpool, printer.assigned_spool_id)
@@ -167,6 +156,17 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
                 entity_id=spool.id,
                 ctx=NotifyContext(printer_id=printer.id, printer_name=printer.name),
             )
+
+    if job.part_id:
+        try:
+            from app.models import Part
+            from app.services.costing import estimate_part_cost
+
+            part = await db.get(Part, job.part_id)
+            if part:
+                await estimate_part_cost(db, part, persist=True)
+        except Exception:
+            logger.debug("part cost snapshot failed", exc_info=True)
 
     ctx = await _ctx_for_job(db, job, printer)
     ctx.duration_seconds = duration
