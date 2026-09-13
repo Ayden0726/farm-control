@@ -5,7 +5,7 @@ export type FarmNotification = {
   body?: string;
   severity: string;
   is_read: boolean;
-  created_at?: string;
+  created_at: string;
   printer_id?: string | null;
   printer_name?: string | null;
   job_id?: string | null;
