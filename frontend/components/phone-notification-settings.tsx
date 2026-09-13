@@ -149,7 +149,11 @@ export function PhoneNotificationSettings() {
         body: JSON.stringify({ public_app_url: appUrl }),
       });
       setAppUrl(res.public_app_url);
-      toast.success("Phone notification links will open this FarmOS URL.");
+      toast.success(
+        res.public_app_url
+          ? `Phone links and printed QR codes will open ${res.public_app_url}`
+          : "Public FarmOS URL cleared.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save URL.");
     } finally {
@@ -235,8 +239,9 @@ export function PhoneNotificationSettings() {
         <CardHeader>
           <CardTitle>FarmOS URL in notification buttons</CardTitle>
           <CardDescription>
-            Print-complete notifications include an Open button. Use the address you open FarmOS from a phone,
-            not localhost, unless this is a local test.
+            Print-complete notifications include an Open button. This is the same host as Settings → Public domain.
+            Enter example.com to use https://farm.example.com, or a LAN IP / localhost with no farm. prefix. Leave
+            blank on a local PC.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -247,7 +252,7 @@ export function PhoneNotificationSettings() {
                 id="public-app-url"
                 value={appUrl}
                 onChange={(e) => setAppUrl(e.target.value)}
-                placeholder="https://farmos.example.com"
+                placeholder="example.com or https://farm.example.com"
               />
             </div>
             <Button type="submit" disabled={savingUrl}>

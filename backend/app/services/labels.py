@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from io import BytesIO
-from pathlib import Path
 
-import segno
 from barcode import Code128
 from barcode.writer import SVGWriter
 
-from app.config import get_settings
-from app.services.qr import qr_payload
+from app.services.qr import render_qr_png
 
 
 def code128_svg(code: str) -> bytes:
@@ -28,13 +25,7 @@ def code128_svg(code: str) -> bytes:
 
 
 def qr_png_bytes(kind: str, token: str, public_base: str = "") -> bytes:
-    settings = get_settings()
-    path = settings.qr_dir / f"{kind}-{token}.png"
-    payload = qr_payload(kind, token, public_base)
-    if not path.exists():
-        qr = segno.make(payload, error="m")
-        qr.save(str(path), scale=8, border=2)
-    return Path(path).read_bytes()
+    return render_qr_png(kind, token, public_base).read_bytes()
 
 
 def label_html_page(
@@ -54,6 +45,8 @@ def label_html_page(
         )
         qr_img = f'<img class="qr" src="{card["qr_url"]}" alt="QR {card["code"]}" />'
         lines = "".join(f"<div class='line'>{line}</div>" for line in card.get("lines", []) if line)
+        scan_url = card.get("scan_url") or ""
+        scan_line = f"<div class='scan'>{scan_url}</div>" if scan_url else ""
         items.append(
             f"""
             <article class="label">
@@ -61,6 +54,7 @@ def label_html_page(
               <div class="title">{card.get("title", "")}</div>
               {lines}
               <div class="code">{card["code"]}</div>
+              {scan_line}
               <div class="marks">{qr_img}{barcode_img}</div>
             </article>
             """
@@ -109,6 +103,7 @@ def label_html_page(
     .title {{ font-size: 13px; font-weight: 700; }}
     .line {{ font-size: 11px; }}
     .code {{ font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; }}
+    .scan {{ font-family: ui-monospace, monospace; font-size: 8px; word-break: break-all; color: #444; }}
     .marks {{ display: flex; align-items: center; gap: 2mm; margin-top: auto; }}
     .qr {{ width: 22mm; height: 22mm; background: #fff; }}
     .barcode {{ height: 18mm; max-width: 100%; }}

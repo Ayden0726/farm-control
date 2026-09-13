@@ -413,13 +413,13 @@ async def test_provider(
 async def set_app_url(
     payload: dict, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
 ):
-    from app.models import AppSetting
+    from app.services.farm_settings import upsert_public_host
 
-    url = str(payload.get("public_app_url") or "").rstrip("/")
-    row = await db.get(AppSetting, "public_app_url")
-    if row:
-        row.value = url
-    else:
-        db.add(AppSetting(key="public_app_url", value=url))
+    raw = str(payload.get("public_app_url") or "")
+    try:
+        info = await upsert_public_host(db, raw)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     await db.commit()
-    return {"public_app_url": url}
+    origin = info["public_farm_url"] or await app_base(db)
+    return {"public_app_url": origin}

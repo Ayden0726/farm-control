@@ -50,6 +50,12 @@ If phones or other PCs will use a specific address:
 ./install.sh --host http://192.168.1.50:3000
 ```
 
+## Public domain (`farm.yourdomain`)
+
+In **Settings**, set **Public domain** to your site’s name (`example.com` or `myprintshop.au`). Print FarmOS then uses `https://farm.example.com` for printed QR codes, scan links, shipping-label QR codes, and other absolute FarmOS URLs. Typing `farm.example.com` or a full URL is not prefixed twice (`farm.farm.…` is not created). `www.example.com` is treated as the public website, so FarmOS still uses `farm.example.com`. Leave the field blank on a local PC — labels keep working with `farmos:` codes and relative `/scan/…` routes.
+
+This field does not create DNS or TLS. Point an A or CNAME record for `farm.yourdomain` at this machine (or your reverse proxy). Localhost and LAN IPs are stored as typed, without a `farm.` prefix.
+
 ## Update
 
 In the app: **Settings → Update Print FarmOS**.

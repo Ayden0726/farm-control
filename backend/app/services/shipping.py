@@ -454,6 +454,7 @@ def farmos_label_html(
     page: str = "a6",
     barcode_url: str = "",
     qr_url: str = "",
+    scan_url: str = "",
 ) -> str:
     import html as html_mod
 
@@ -479,6 +480,7 @@ def farmos_label_html(
     items_html = "".join(f"<li>{esc(item)}</li>" for item in items) or f"<li>{esc(contents or '3D printed parts')}</li>"
     barcode = f'<img class="barcode" src="{barcode_url}" alt="{esc(code)}" />' if barcode_url else ""
     qr = f'<img class="qr" src="{qr_url}" alt="QR {esc(code)}" />' if qr_url else ""
+    scan = f'<div class="scan">{esc(scan_url)}</div>' if scan_url else ""
     return f"""<!doctype html>
 <html>
 <head>
@@ -500,6 +502,7 @@ def farmos_label_html(
     .meta {{ font-size: 12px; }}
     ul {{ margin: 0; padding-left: 4mm; font-size: 12px; }}
     .code {{ font-family: ui-monospace, monospace; font-size: 13px; }}
+    .scan {{ font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; color: #444; }}
     .marks {{ display: flex; align-items: flex-end; gap: 4mm; margin-top: auto; }}
     .qr {{ width: 28mm; height: 28mm; }}
     .barcode {{ height: 22mm; max-width: 70mm; }}
@@ -532,6 +535,7 @@ def farmos_label_html(
       <ul>{items_html}</ul>
     </div>
     <div class="code">{esc(code)}</div>
+    {scan}
     <div class="marks">{qr}{barcode}</div>
   </article>
   <script>window.addEventListener("load", () => setTimeout(() => window.print(), 300));</script>
@@ -560,7 +564,8 @@ async def create_farmos_preview(
 
     from app.services.auspost import PRODUCT_BY_ID, merge_address
     from app.services.labels import code128_svg, qr_png_bytes
-    from app.services.notifications import app_base
+    from app.services.farm_settings import public_scan_base
+    from app.services.qr import qr_payload
 
     to_addr = merge_address(order.shipping_address if isinstance(order.shipping_address, dict) else {}, to_addr)
     order.shipping_address = to_addr
@@ -569,7 +574,9 @@ async def create_farmos_preview(
         barcode_url = "data:image/svg+xml;base64," + base64.b64encode(code128_svg(code)).decode()
     except Exception:
         barcode_url = ""
-    qr_url = "data:image/png;base64," + base64.b64encode(qr_png_bytes("order", code, await app_base(db))).decode()
+    base = await public_scan_base(db)
+    payload = qr_payload("order", code, base)
+    qr_url = "data:image/png;base64," + base64.b64encode(qr_png_bytes("order", code, base)).decode()
     service_name = (PRODUCT_BY_ID.get(service) or {}).get("name") or "Print FarmOS label"
     dims = f"{int(length_cm)}×{int(width_cm)}×{int(height_cm)} cm"
     html = farmos_label_html(
@@ -584,6 +591,7 @@ async def create_farmos_preview(
         page=page,
         barcode_url=barcode_url,
         qr_url=qr_url,
+        scan_url=payload if payload.startswith("http") else "",
     )
     shipment = None
     if persist:

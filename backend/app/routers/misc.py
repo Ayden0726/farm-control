@@ -34,7 +34,15 @@ from app.services.qr import render_qr_png
 from app.services.woocommerce import woocommerce_configured
 from app.services.shopify import normalize_shop, shopify_config, shopify_configured
 from app.security import encrypt_secret
-from app.services.farm_settings import get_automation, get_mes, upsert_automation, upsert_mes
+from app.services.farm_settings import (
+    get_automation,
+    get_mes,
+    get_public_host,
+    public_scan_base,
+    upsert_automation,
+    upsert_mes,
+    upsert_public_host,
+)
 
 notify_router = APIRouter(prefix="/notifications-legacy-removed", tags=["notifications"])
 maint_router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -282,6 +290,11 @@ async def put_settings(
         stored.value = integrations
     else:
         db.add(AppSetting(key="integrations", value=integrations))
+    if payload.public_domain is not None:
+        try:
+            await upsert_public_host(db, payload.public_domain)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     await upsert_automation(
         db,
         auto_part_ejection=payload.auto_part_ejection,
@@ -317,6 +330,7 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
     automation = await get_automation(db)
     mes = await get_mes(db)
     shopify = await shopify_config(db)
+    public = await get_public_host(db)
     return SettingsOut(
         company_name=(company.value if company else "Print Farm"),
         woocommerce_url=settings.woocommerce_url,
@@ -333,13 +347,16 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
         pack_bed_x_mm=automation["pack_bed_x_mm"],
         pack_bed_y_mm=automation["pack_bed_y_mm"],
         pack_gap_mm=automation["pack_gap_mm"],
+        public_domain=public["public_domain"],
+        public_farm_host=public["public_farm_host"],
+        public_farm_url=public["public_farm_url"],
         **{k: mes[k] for k in mes},
     )
 
 
 @qr_router.get("/{kind}/{token}")
-async def qr_image(kind: str, token: str):
-    path = render_qr_png(kind, token)
+async def qr_image(kind: str, token: str, db: AsyncSession = Depends(get_db)):
+    path = render_qr_png(kind, token, await public_scan_base(db))
     return FileResponse(path, media_type="image/png")
 
 

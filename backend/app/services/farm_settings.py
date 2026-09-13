@@ -136,3 +136,79 @@ async def upsert_mes(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any
     else:
         db.add(AppSetting(key="mes", value=current))
     return await get_mes(db)
+
+
+def _setting_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+async def get_public_host(db: AsyncSession) -> dict[str, str]:
+    """Operator-entered domain plus the origin used for QR / scan links."""
+    from urllib.parse import urlparse
+
+    from app.services.public_host import normalize_public_host
+
+    domain_row = await db.get(AppSetting, "public_domain")
+    raw = _setting_text(domain_row.value if domain_row else None).strip()
+    url_row = await db.get(AppSetting, "public_app_url")
+    stored_url = _setting_text(url_row.value if url_row else None).strip().rstrip("/")
+    if raw:
+        result = normalize_public_host(raw)
+        if result.ok and result.origin:
+            return {
+                "public_domain": raw,
+                "public_farm_host": result.host,
+                "public_farm_url": result.origin,
+            }
+    if stored_url:
+        # Legacy notification URL is canonical on read — do not rewrite to farm.farmos…
+        if "://" in stored_url:
+            host = urlparse(stored_url).netloc or stored_url
+            origin = stored_url
+        else:
+            result = normalize_public_host(stored_url)
+            host = result.host if result.ok else stored_url
+            origin = result.origin if result.ok else stored_url
+        return {
+            "public_domain": raw,
+            "public_farm_host": host,
+            "public_farm_url": origin,
+        }
+    return {"public_domain": raw, "public_farm_host": "", "public_farm_url": ""}
+
+
+async def public_scan_base(db: AsyncSession) -> str:
+    """Absolute origin for printed QR / scan URLs, or '' so local farmos: payloads are used."""
+    return (await get_public_host(db))["public_farm_url"]
+
+
+async def upsert_public_host(db: AsyncSession, raw: str | None) -> dict[str, str]:
+    from app.services.public_host import normalize_public_host
+
+    text = (raw or "").strip()
+    result = normalize_public_host(text)
+    if text and not result.ok:
+        raise ValueError(result.error)
+
+    domain_row = await db.get(AppSetting, "public_domain")
+    url_row = await db.get(AppSetting, "public_app_url")
+    domain_value = text
+    url_value = result.origin if text else ""
+
+    if domain_row:
+        domain_row.value = domain_value
+    else:
+        db.add(AppSetting(key="public_domain", value=domain_value))
+    if url_row:
+        url_row.value = url_value
+    else:
+        db.add(AppSetting(key="public_app_url", value=url_value))
+    return {
+        "public_domain": domain_value,
+        "public_farm_host": result.host if text else "",
+        "public_farm_url": url_value,
+    }

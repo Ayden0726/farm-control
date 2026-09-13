@@ -148,10 +148,11 @@ def _setting_text(value: Any) -> str:
 
 
 async def app_base(db: AsyncSession) -> str:
-    row = await db.get(AppSetting, "public_app_url")
-    stored = _setting_text(row.value if row else None).strip()
-    if stored:
-        return stored.rstrip("/")
+    from app.services.farm_settings import public_scan_base
+
+    farm = await public_scan_base(db)
+    if farm:
+        return farm
     return get_settings().public_app_url.rstrip("/")
 
 

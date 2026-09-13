@@ -591,6 +591,9 @@ class SettingsOut(BaseModel):
     pack_bed_x_mm: float = 220.0
     pack_bed_y_mm: float = 220.0
     pack_gap_mm: float = 8.0
+    public_domain: str = ""
+    public_farm_host: str = ""
+    public_farm_url: str = ""
     auto_requeue_failed_qc: bool = True
     electricity_price_per_kwh: float = 0.32
     labour_rate_per_hour: float = 0.0
@@ -616,6 +619,7 @@ class SettingsIn(BaseModel):
     shopify_webhook_secret: str | None = None
     shopify_api_version: str | None = None
     notify_webhook_url: str | None = None
+    public_domain: str | None = None
     auto_part_ejection: bool | None = None
     pack_bed_x_mm: float | None = Field(default=None, gt=0, le=2000)
     pack_bed_y_mm: float | None = Field(default=None, gt=0, le=2000)

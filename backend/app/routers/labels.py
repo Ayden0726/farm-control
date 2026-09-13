@@ -15,7 +15,8 @@ from app.deps import get_current_user
 from app.models import FilamentProduct, FilamentSpool, PartBin, Printer, User
 from app.services.filament import audit
 from app.services.labels import code128_svg, label_html_page, qr_png_bytes
-from app.services.notifications import app_base
+from app.services.farm_settings import public_scan_base
+from app.services.qr import qr_payload
 
 router = APIRouter(prefix="/labels", tags=["labels"])
 
@@ -35,12 +36,17 @@ def _data_qr(kind: str, token: str, base: str) -> str:
     return "data:image/png;base64," + base64.b64encode(raw).decode()
 
 
+def _scan_url(kind: str, token: str, base: str) -> str:
+    payload = qr_payload(kind, token, base)
+    return payload if payload.startswith("http") else ""
+
+
 def _data_barcode(code: str) -> str:
     raw = code128_svg(code)
     return "data:image/svg+xml;base64," + base64.b64encode(raw).decode()
 
 
-def _product_card(product: FilamentProduct, qr_url: str, barcode_url: str) -> dict:
+def _product_card(product: FilamentProduct, qr_url: str, barcode_url: str, scan_url: str = "") -> dict:
     return {
         "title": product.manufacturer,
         "lines": [product.product_name or product.material, product.color, product.spool_size_label],
@@ -49,10 +55,11 @@ def _product_card(product: FilamentProduct, qr_url: str, barcode_url: str) -> di
         "barcode_url": barcode_url,
         "kind": "product",
         "id": str(product.id),
+        "scan_url": scan_url,
     }
 
 
-def _spool_card(spool: FilamentSpool, qr_url: str) -> dict:
+def _spool_card(spool: FilamentSpool, qr_url: str, scan_url: str = "") -> dict:
     product = spool.product
     manufacturer = (product.manufacturer if product else spool.manufacturer) or ""
     material = (product.material if product else spool.material) or ""
@@ -68,6 +75,7 @@ def _spool_card(spool: FilamentSpool, qr_url: str) -> dict:
         "barcode_url": "",
         "kind": "spool",
         "id": str(spool.id),
+        "scan_url": scan_url,
     }
 
 
@@ -82,7 +90,7 @@ async def code128(code: str, _: User = Depends(get_current_user)):
 
 @router.get("/qr/{kind}/{token}")
 async def label_qr(kind: str, token: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
-    base = await app_base(db)
+    base = await public_scan_base(db)
     return Response(content=qr_png_bytes(kind, token, base), media_type="image/png")
 
 
@@ -91,7 +99,7 @@ async def label_sheet(
     payload: SheetIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ):
     cards: list[dict] = []
-    base = await app_base(db)
+    base = await public_scan_base(db)
     if payload.kind == "product":
         for item in payload.items:
             product = await db.get(FilamentProduct, UUID(str(item["id"])))
@@ -101,7 +109,7 @@ async def label_sheet(
             qr = _data_qr("product", product.barcode_id, base)
             bar = _data_barcode(product.barcode_id)
             for _ in range(copies):
-                cards.append(_product_card(product, qr, bar))
+                cards.append(_product_card(product, qr, bar, _scan_url("product", product.barcode_id, base)))
         await audit(db, "labels_generated", "product", "sheet", {"count": len(cards)}, actor=user.email)
     elif payload.kind == "spool":
         for item in payload.items:
@@ -118,7 +126,7 @@ async def label_sheet(
             token = spool.public_code or spool.qr_token
             qr = _data_qr("spool", token, base)
             for _ in range(copies):
-                cards.append(_spool_card(spool, qr))
+                cards.append(_spool_card(spool, qr, _scan_url("spool", token, base)))
         await audit(db, "labels_generated", "spool", "sheet", {"count": len(cards)}, actor=user.email)
     elif payload.kind == "printer":
         for item in payload.items:
@@ -135,6 +143,7 @@ async def label_sheet(
                     "barcode_url": _data_barcode(token),
                     "kind": "printer",
                     "id": str(printer.id),
+                    "scan_url": _scan_url("printer", token, base),
                 }
             )
         await audit(db, "labels_generated", "printer", "sheet", {"count": len(cards)}, actor=user.email)
@@ -153,6 +162,7 @@ async def label_sheet(
                     "barcode_url": _data_barcode(token),
                     "kind": "bin",
                     "id": str(bin_row.id),
+                    "scan_url": _scan_url("bin", token, base),
                 }
             )
         await audit(db, "labels_generated", "bin", "sheet", {"count": len(cards)}, actor=user.email)

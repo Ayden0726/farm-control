@@ -207,6 +207,9 @@ export type FarmSettings = {
   backup_retention_days?: number;
   backup_include_files?: boolean;
   include_camera_in_notifications?: boolean;
+  public_domain?: string;
+  public_farm_host?: string;
+  public_farm_url?: string;
 };
 
 export type Spool = {

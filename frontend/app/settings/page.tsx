@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { PhoneNotificationSettings } from "@/components/phone-notification-settings";
 import { ShippingSettingsCard } from "@/components/shipping-settings";
 import type { FarmSettings } from "@/lib/types";
+import { normalizePublicHost } from "@/lib/public-host";
 
 type Settings = FarmSettings;
 
@@ -25,6 +26,8 @@ type UpdateStatus = {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [company, setCompany] = useState("");
+  const [publicDomain, setPublicDomain] = useState("");
+  const [savingDomain, setSavingDomain] = useState(false);
   const [wooUrl, setWooUrl] = useState("");
   const [wooKey, setWooKey] = useState("");
   const [wooSecret, setWooSecret] = useState("");
@@ -62,6 +65,7 @@ export default function SettingsPage() {
       .then((s) => {
         setSettings(s);
         setCompany(s.company_name);
+        setPublicDomain(s.public_domain || "");
         setWooUrl(s.woocommerce_url);
         setShopifyShop(s.shopify_shop || "");
         setShopifyApiVersion(s.shopify_api_version || "2024-10");
@@ -90,6 +94,8 @@ export default function SettingsPage() {
       .then(setUsers)
       .catch(() => setUsers([]));
   }, []);
+
+  const domainPreview = useMemo(() => normalizePublicHost(publicDomain), [publicDomain]);
 
   useEffect(() => {
     let cancel = false;
@@ -141,6 +147,33 @@ export default function SettingsPage() {
     }
   }
 
+  async function savePublicDomain(e: FormEvent) {
+    e.preventDefault();
+    const preview = normalizePublicHost(publicDomain);
+    if (preview.error) {
+      toast.error(preview.error);
+      return;
+    }
+    setSavingDomain(true);
+    try {
+      const res = await api<Settings>("/api/v1/settings", {
+        method: "PUT",
+        body: JSON.stringify({ public_domain: publicDomain.trim() }),
+      });
+      setSettings(res);
+      setPublicDomain(res.public_domain || "");
+      toast.success(
+        res.public_farm_url
+          ? `FarmOS links and printed QR codes will use ${res.public_farm_url}`
+          : "Public domain cleared. QR codes stay local until you set a domain.",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save domain");
+    } finally {
+      setSavingDomain(false);
+    }
+  }
+
   async function runUpdate() {
     setUpdating(true);
     try {
@@ -169,6 +202,53 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8">
+      <form onSubmit={savePublicDomain}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Public domain</CardTitle>
+            <CardDescription>
+              Enter your domain (example.com). FarmOS links and printed QR codes will use farm.example.com. Leave blank
+              on a local PC.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="public-domain">Public domain</Label>
+              <Input
+                id="public-domain"
+                value={publicDomain}
+                onChange={(e) => setPublicDomain(e.target.value)}
+                placeholder="example.com"
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={Boolean(domainPreview.error)}
+                inputMode="url"
+              />
+            </div>
+            {domainPreview.error ? (
+              <p className="text-sm text-red-300">{domainPreview.error}</p>
+            ) : domainPreview.origin ? (
+              <p className="text-sm text-zinc-300">
+                Farm URL:{" "}
+                <span className="font-mono break-all text-zinc-100">{domainPreview.origin}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-zinc-500">
+                Not set — printed QR codes stay as <span className="font-mono">farmos:kind:token</span> and work on
+                this PC without a domain.
+              </p>
+            )}
+            <p className="text-xs text-zinc-500">
+              This does not create DNS or a certificate. Point an A or CNAME record for{" "}
+              <span className="font-mono">farm.yourdomain</span> at this machine or your reverse proxy. Localhost and
+              LAN IPs are stored as you typed them, without a farm. prefix. Real domains always use https.
+            </p>
+            <Button type="submit" disabled={savingDomain || Boolean(domainPreview.error)}>
+              {savingDomain ? "Saving…" : "Save public domain"}
+            </Button>
+          </CardContent>
+        </Card>
+      </form>
       <form onSubmit={save} className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -240,7 +320,8 @@ export default function SettingsPage() {
               <span className="font-mono">write_orders</span>, <span className="font-mono">write_fulfillments</span>.
               Webhook URL:{" "}
               <span className="font-mono break-all">
-                {typeof window !== "undefined" ? window.location.origin : ""}/api/v1/shopify/webhook
+                {(settings.public_farm_url ||
+                  (typeof window !== "undefined" ? window.location.origin : "")) + "/api/v1/shopify/webhook"}
               </span>
               . Topics: <span className="font-mono">orders/create</span>, <span className="font-mono">orders/paid</span>.
               Line items match SKU first, then the Shopify product ID on the product record.
