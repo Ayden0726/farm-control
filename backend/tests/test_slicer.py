@@ -102,6 +102,30 @@ class CostAndMetaTests(unittest.TestCase):
         self.assertAlmostEqual(petg[0], 12.7, places=1)
 
 
+class GeometryTests(unittest.TestCase):
+    def test_usable_prefers_model_over_marketing(self) -> None:
+        from types import SimpleNamespace
+
+        from app.services.printer_geometry import apply_printer_geometry_defaults
+
+        printer = SimpleNamespace(
+            name="Bay-02 K1 Max",
+            model="Creality K1 Max",
+            build_x_mm=None,
+            build_y_mm=None,
+            build_z_mm=None,
+            usable_x_mm=None,
+            usable_y_mm=None,
+            usable_z_mm=None,
+            nozzle_diameter_mm=None,
+            firmware="",
+        )
+        apply_printer_geometry_defaults(printer)
+        self.assertEqual(printer.build_x_mm, 300)
+        self.assertEqual(printer.usable_x_mm, 290)
+        self.assertEqual(printer.firmware, "klipper")
+
+
 class CompatibilityTests(unittest.TestCase):
     def test_nozzle_mismatch_reason(self) -> None:
         class P:

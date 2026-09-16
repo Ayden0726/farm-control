@@ -37,25 +37,25 @@ def apply_printer_geometry_defaults(printer: Printer) -> bool:
         printer.build_x_mm, printer.build_y_mm, printer.build_z_mm = defaults["build"]
         changed = True
     if printer.usable_x_mm is None:
-        if printer.build_x_mm is not None:
-            printer.usable_x_mm = float(printer.build_x_mm)
-            changed = True
-        elif defaults:
+        if defaults:
             printer.usable_x_mm = float(defaults["usable"][0])
             changed = True
-    if printer.usable_y_mm is None:
-        if printer.build_y_mm is not None:
-            printer.usable_y_mm = float(printer.build_y_mm)
+        elif printer.build_x_mm is not None:
+            printer.usable_x_mm = float(printer.build_x_mm)
             changed = True
-        elif defaults:
+    if printer.usable_y_mm is None:
+        if defaults:
             printer.usable_y_mm = float(defaults["usable"][1])
             changed = True
-    if printer.usable_z_mm is None:
-        if printer.build_z_mm is not None:
-            printer.usable_z_mm = float(printer.build_z_mm)
+        elif printer.build_y_mm is not None:
+            printer.usable_y_mm = float(printer.build_y_mm)
             changed = True
-        elif defaults:
+    if printer.usable_z_mm is None:
+        if defaults:
             printer.usable_z_mm = float(defaults["usable"][2])
+            changed = True
+        elif printer.build_z_mm is not None:
+            printer.usable_z_mm = float(printer.build_z_mm)
             changed = True
     if printer.nozzle_diameter_mm is None and defaults:
         printer.nozzle_diameter_mm = float(defaults["nozzle"])
