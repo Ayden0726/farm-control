@@ -58,6 +58,17 @@ TABLE_COLUMNS = {
         "avg_power_watts": "DOUBLE PRECISION DEFAULT 180",
         "machine_rate_per_hour": "DOUBLE PRECISION DEFAULT 0",
         "current_downtime_reason": "VARCHAR(40)",
+        "usable_x_mm": "DOUBLE PRECISION",
+        "usable_y_mm": "DOUBLE PRECISION",
+        "usable_z_mm": "DOUBLE PRECISION",
+        "bed_shape": "VARCHAR(40) DEFAULT 'rectangular'",
+        "bed_origin": "VARCHAR(40) DEFAULT 'corner'",
+        "keepout_polygons": "JSON DEFAULT '[]'::json",
+        "firmware": "VARCHAR(40) DEFAULT ''",
+        "filament_diameter_mm": "DOUBLE PRECISION DEFAULT 1.75",
+        "max_speed_mm_s": "DOUBLE PRECISION",
+        "max_accel_mm_s2": "DOUBLE PRECISION",
+        "max_volumetric_mm3_s": "DOUBLE PRECISION",
     },
     "part_bins": {
         "public_code": "VARCHAR(40)",
@@ -74,6 +85,7 @@ TABLE_COLUMNS = {
         "incompatibility_reason": "VARCHAR(500) DEFAULT ''",
         "batch_code": "VARCHAR(80)",
         "unattended_approved": "BOOLEAN DEFAULT true",
+        "slice_job_id": "UUID",
     },
     "gcode_files": {
         "required_color": "VARCHAR(80) DEFAULT ''",
@@ -86,12 +98,26 @@ TABLE_COLUMNS = {
         "required_nozzle_mm": "DOUBLE PRECISION",
         "unattended_approved": "BOOLEAN DEFAULT true",
         "production_approved": "BOOLEAN DEFAULT false",
+        "stl_file_id": "UUID",
+        "slicer_profile_id": "UUID",
+        "slicer_profile_version": "INTEGER",
+        "sliced_printer_id": "UUID",
+        "plate_json": "JSON DEFAULT '{}'::json",
+        "filament_length_mm": "DOUBLE PRECISION",
+        "filament_volume_cm3": "DOUBLE PRECISION",
+        "density_g_cm3": "DOUBLE PRECISION",
     },
     "stl_files": {
         "bbox_x_mm": "DOUBLE PRECISION",
         "bbox_y_mm": "DOUBLE PRECISION",
         "bbox_z_mm": "DOUBLE PRECISION",
         "triangle_count": "INTEGER",
+        "volume_mm3": "DOUBLE PRECISION",
+        "version": "INTEGER DEFAULT 1",
+        "is_archived": "BOOLEAN DEFAULT false",
+        "production_approved": "BOOLEAN DEFAULT false",
+        "recommended_spacing_mm": "DOUBLE PRECISION DEFAULT 6",
+        "orientation_json": "JSON DEFAULT '{}'::json",
     },
     "parts": {
         "min_stock": "INTEGER DEFAULT 0",
@@ -136,6 +162,9 @@ TABLE_COLUMNS = {
         "height_cm": "DOUBLE PRECISION DEFAULT 0",
         "payload_snapshot": "JSON",
         "label_path": "VARCHAR(500) DEFAULT ''",
+    },
+    "filament_products": {
+        "density_g_cm3": "DOUBLE PRECISION",
     },
     "products": {
         "shopify_product_id": "VARCHAR(40)",
@@ -236,5 +265,14 @@ def upgrade_schema(conn: Connection) -> None:
         item_cols = {c["name"] for c in inspect(conn).get_columns("production_run_items")}
         if "gcode_file_id" in item_cols:
             conn.execute(text("ALTER TABLE production_run_items ALTER COLUMN gcode_file_id DROP NOT NULL"))
+    if "printers" in set(inspect(conn).get_table_names()):
+        conn.execute(
+            text(
+                "UPDATE printers SET usable_x_mm = COALESCE(usable_x_mm, build_x_mm), "
+                "usable_y_mm = COALESCE(usable_y_mm, build_y_mm), "
+                "usable_z_mm = COALESCE(usable_z_mm, build_z_mm) "
+                "WHERE usable_x_mm IS NULL OR usable_y_mm IS NULL OR usable_z_mm IS NULL"
+            )
+        )
     _add_enum_value(conn, "userrole", "packing")
     _add_enum_value(conn, "userrole", "inventory")

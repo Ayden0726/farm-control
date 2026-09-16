@@ -199,6 +199,14 @@ class GCodeFile(TimestampMixin, Base):
     required_nozzle_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     unattended_approved: Mapped[bool] = mapped_column(Boolean, default=True)
     production_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    stl_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("stl_files.id"), nullable=True)
+    slicer_profile_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("slicer_profiles.id"), nullable=True)
+    slicer_profile_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sliced_printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+    plate_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    filament_length_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    filament_volume_cm3: Mapped[float | None] = mapped_column(Float, nullable=True)
+    density_g_cm3: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     part: Mapped[Part | None] = relationship(back_populates="gcode_files")
     compatible_printers: Mapped[list[GCodePrinterCompat]] = relationship(
@@ -231,6 +239,12 @@ class StlFile(TimestampMixin, Base):
     bbox_y_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     bbox_z_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     triangle_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    volume_mm3: Mapped[float | None] = mapped_column(Float, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    production_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    recommended_spacing_mm: Mapped[float] = mapped_column(Float, default=6.0)
+    orientation_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     part: Mapped[Part | None] = relationship(back_populates="stl_files")
 
@@ -322,6 +336,17 @@ class Printer(TimestampMixin, Base):
     avg_power_watts: Mapped[float] = mapped_column(Float, default=180)
     machine_rate_per_hour: Mapped[float] = mapped_column(Float, default=0)
     current_downtime_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    usable_x_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    usable_y_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    usable_z_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bed_shape: Mapped[str] = mapped_column(String(40), default="rectangular")
+    bed_origin: Mapped[str] = mapped_column(String(40), default="corner")
+    keepout_polygons: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    firmware: Mapped[str] = mapped_column(String(40), default="")
+    filament_diameter_mm: Mapped[float] = mapped_column(Float, default=1.75)
+    max_speed_mm_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_accel_mm_s2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_volumetric_mm3_s: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     assigned_spool: Mapped[FilamentSpool | None] = relationship(
         foreign_keys=[assigned_spool_id], post_update=True
@@ -490,6 +515,7 @@ class PrintJob(TimestampMixin, Base):
     incompatibility_reason: Mapped[str] = mapped_column(String(500), default="")
     batch_code: Mapped[str | None] = mapped_column(String(80), index=True, nullable=True)
     unattended_approved: Mapped[bool] = mapped_column(Boolean, default=True)
+    slice_job_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("slice_jobs.id"), nullable=True)
 
     production_run: Mapped[ProductionRun | None] = relationship(back_populates="jobs")
     production_run_item: Mapped[ProductionRunItem | None] = relationship()
@@ -772,6 +798,7 @@ class FilamentProduct(TimestampMixin, Base):
     supplier_url: Mapped[str] = mapped_column(String(500), default="")
     nozzle_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     bed_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    density_g_cm3: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     min_stock_g: Mapped[float] = mapped_column(Float, default=6000)
     target_stock_g: Mapped[float] = mapped_column(Float, default=18000)
@@ -1176,4 +1203,104 @@ class BackupRecord(TimestampMixin, Base):
     include_files: Mapped[bool] = mapped_column(Boolean, default=False)
     error_message: Mapped[str] = mapped_column(Text, default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class SlicerProfile(TimestampMixin, Base):
+    """Versioned PrusaSlicer settings. Historical slice jobs keep the row they used."""
+
+    __tablename__ = "slicer_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), default=uuid.uuid4, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    material: Mapped[str] = mapped_column(String(50), default="PETG")
+    nozzle_mm: Mapped[float] = mapped_column(Float, default=0.4)
+    density_g_cm3: Mapped[float] = mapped_column(Float, default=1.27)
+    layer_height_mm: Mapped[float] = mapped_column(Float, default=0.2)
+    first_layer_height_mm: Mapped[float] = mapped_column(Float, default=0.2)
+    perimeters: Mapped[int] = mapped_column(Integer, default=3)
+    infill_percent: Mapped[float] = mapped_column(Float, default=20)
+    nozzle_temp_c: Mapped[float] = mapped_column(Float, default=250)
+    bed_temp_c: Mapped[float] = mapped_column(Float, default=80)
+    brim_width_mm: Mapped[float] = mapped_column(Float, default=0)
+    support_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    print_speed_mm_s: Mapped[float] = mapped_column(Float, default=80)
+    compatible_printer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    settings_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class SliceJob(TimestampMixin, Base):
+    __tablename__ = "slice_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    status: Mapped[str] = mapped_column(String(40), default="waiting", index=True)
+    stl_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("stl_files.id"), nullable=True)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+    profile_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("slicer_profiles.id"), nullable=True)
+    profile_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    part_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("parts.id"), nullable=True)
+    production_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("production_runs.id"), nullable=True)
+    production_run_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("production_run_items.id"), nullable=True
+    )
+    order_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    gcode_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gcode_files.id"), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    spacing_mm: Mapped[float] = mapped_column(Float, default=6.0)
+    optimisation_mode: Mapped[str] = mapped_column(String(40), default="balanced")
+    plate_index: Mapped[int] = mapped_column(Integer, default=1)
+    plate_count: Mapped[int] = mapped_column(Integer, default=1)
+    plate_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    sliced_time_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    filament_length_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    filament_volume_cm3: Mapped[float | None] = mapped_column(Float, nullable=True)
+    filament_grams: Mapped[float | None] = mapped_column(Float, nullable=True)
+    material_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    material: Mapped[str] = mapped_column(String(50), default="PETG")
+    density_g_cm3: Mapped[float] = mapped_column(Float, default=1.27)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mixed_parts_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    admin_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str] = mapped_column(String(255), default="")
+
+
+class PlateLayout(TimestampMixin, Base):
+    __tablename__ = "plate_layouts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    part_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("parts.id"), nullable=True, index=True)
+    stl_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("stl_files.id"), nullable=True)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True)
+    profile_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("slicer_profiles.id"), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    spacing_mm: Mapped[float] = mapped_column(Float, default=6.0)
+    placements_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=True)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0)
+    success_count: Mapped[int] = mapped_column(Integer, default=0)
+    fail_count: Mapped[int] = mapped_column(Integer, default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class SlicerDurationStat(TimestampMixin, Base):
+    """Slicer vs actual duration for scheduling calibration only — never rewrites G-code."""
+
+    __tablename__ = "slicer_duration_stats"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    printer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("printers.id"), nullable=True, index=True)
+    material: Mapped[str] = mapped_column(String(50), default="")
+    nozzle_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    profile_family_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    sliced_seconds: Mapped[float] = mapped_column(Float, default=0)
+    actual_seconds: Mapped[float] = mapped_column(Float, default=0)
+    sample_count: Mapped[int] = mapped_column(Integer, default=0)
+    calibration_multiplier: Mapped[float] = mapped_column(Float, default=1.0)
+
 

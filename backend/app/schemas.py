@@ -69,6 +69,17 @@ class PrinterIn(BaseModel):
     unattended_mode: str = "allowed"
     avg_power_watts: float = 180
     machine_rate_per_hour: float = 0
+    usable_x_mm: float | None = None
+    usable_y_mm: float | None = None
+    usable_z_mm: float | None = None
+    bed_shape: str = "rectangular"
+    bed_origin: str = "corner"
+    keepout_polygons: list[Any] = Field(default_factory=list)
+    firmware: str = ""
+    filament_diameter_mm: float = 1.75
+    max_speed_mm_s: float | None = None
+    max_accel_mm_s2: float | None = None
+    max_volumetric_mm3_s: float | None = None
 
 
 class PrinterUpdate(BaseModel):
@@ -99,6 +110,17 @@ class PrinterUpdate(BaseModel):
     avg_power_watts: float | None = None
     machine_rate_per_hour: float | None = None
     current_downtime_reason: str | None = None
+    usable_x_mm: float | None = None
+    usable_y_mm: float | None = None
+    usable_z_mm: float | None = None
+    bed_shape: str | None = None
+    bed_origin: str | None = None
+    keepout_polygons: list[Any] | None = None
+    firmware: str | None = None
+    filament_diameter_mm: float | None = None
+    max_speed_mm_s: float | None = None
+    max_accel_mm_s2: float | None = None
+    max_volumetric_mm3_s: float | None = None
 
 
 class PrinterOut(BaseModel):
@@ -151,6 +173,17 @@ class PrinterOut(BaseModel):
     camera_configured: bool = False
     camera_status: str = "offline"
     camera_proxy_url: str | None = None
+    usable_x_mm: float | None = None
+    usable_y_mm: float | None = None
+    usable_z_mm: float | None = None
+    bed_shape: str = "rectangular"
+    bed_origin: str = "corner"
+    keepout_polygons: list[Any] = Field(default_factory=list)
+    firmware: str = ""
+    filament_diameter_mm: float = 1.75
+    max_speed_mm_s: float | None = None
+    max_accel_mm_s2: float | None = None
+    max_volumetric_mm3_s: float | None = None
 
 
 class PartIn(BaseModel):
@@ -200,6 +233,12 @@ class GCodeOut(BaseModel):
     required_nozzle_mm: float | None = None
     unattended_approved: bool = True
     production_approved: bool = False
+    stl_file_id: UUID | None = None
+    sliced_printer_id: UUID | None = None
+    plate_json: dict | None = None
+    filament_length_mm: float | None = None
+    filament_volume_cm3: float | None = None
+    density_g_cm3: float | None = None
 
 
 class GCodeUpdate(BaseModel):
@@ -243,6 +282,21 @@ class StlOut(BaseModel):
     pack_bed_x_mm: float | None = None
     pack_bed_y_mm: float | None = None
     pack_gap_mm: float | None = None
+    version: int = 1
+    is_archived: bool = False
+    production_approved: bool = False
+    recommended_spacing_mm: float = 6.0
+    volume_mm3: float | None = None
+    bed_warnings: list[str] = Field(default_factory=list)
+
+
+class StlUpdate(BaseModel):
+    part_id: UUID | None = None
+    notes: str | None = None
+    production_approved: bool | None = None
+    recommended_spacing_mm: float | None = None
+    is_archived: bool | None = None
+    orientation_json: dict | None = None
 
 
 class BomItemIn(BaseModel):

@@ -32,6 +32,8 @@ from app.models import (
 from app.services.farm_settings import auto_part_ejection_enabled
 from app.services.notifications import NotifyContext, notify, print_complete_copy, recently_notified
 
+logger = logging.getLogger("farmos.scheduler")
+
 async def _ctx_for_job(db: AsyncSession, job: PrintJob, printer: Printer) -> NotifyContext:
     run_name = None
     if job.production_run_id:
@@ -89,6 +91,12 @@ async def complete_job(db: AsyncSession, job: PrintJob, printer: Printer, failed
     duration = int(_elapsed_print_seconds(job, now))
     printer.total_print_seconds += duration
     printer.total_jobs += 1
+    try:
+        from app.services.slicer_duration import record_actual
+
+        await record_actual(db, job, printer, duration)
+    except Exception:
+        logger.exception("slicer duration calibration failed")
 
     if failed:
         job.status = JobStatus.failed

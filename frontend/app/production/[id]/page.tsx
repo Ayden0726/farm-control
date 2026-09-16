@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -135,6 +136,11 @@ export default function ProductionDetailPage() {
           <Button variant="outline" size="sm" onClick={() => act("requeue-scrap")}>
             Requeue scrap
           </Button>
+          <Link href={`/slicer?run_id=${run.id}`}>
+            <Button variant="outline" size="sm">
+              Slice plates
+            </Button>
+          </Link>
           <Button variant="destructive" size="sm" onClick={() => act("cancel")}>
             Cancel remaining
           </Button>

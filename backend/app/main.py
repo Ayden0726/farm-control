@@ -30,6 +30,7 @@ from app.routers.products import router as products_router
 from app.routers.purchasing import router as purchasing_router
 from app.routers.queue import router as queue_router
 from app.routers.shipping import router as shipping_router
+from app.routers.slicer import router as slicer_router
 from app.routers.system import router as system_router
 from app.routers.misc import analytics_router, maint_router, qr_router, scan_router, settings_router
 from app.util import configure_logging
@@ -82,10 +83,12 @@ async def lifespan(app: FastAPI):
             from app.seed_filament import ensure_filament_system
             from app.services.notifications import ensure_defaults
             from app.services.seed_mes import ensure_mes_defaults
+            from app.services.slicer_defaults import ensure_slicer_defaults
 
             await ensure_defaults(db)
             await ensure_filament_system(db)
             await ensure_mes_defaults(db)
+            await ensure_slicer_defaults(db)
             await db.commit()
         except Exception:
             logger.exception("startup seed failed — API will still serve first-run setup")
@@ -140,6 +143,7 @@ def create_app() -> FastAPI:
     application.include_router(parts_router, prefix=api)
     application.include_router(gcode_router, prefix=api)
     application.include_router(stl_router, prefix=api)
+    application.include_router(slicer_router, prefix=api)
     application.include_router(inventory_router, prefix=api)
     application.include_router(filament_ops_router, prefix=api)
     application.include_router(filament_router, prefix=api)

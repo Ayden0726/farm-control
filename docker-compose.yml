@@ -68,6 +68,30 @@ services:
     restart: unless-stopped
     command: python -m app.worker
 
+  slicer-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.slicer
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://farmos:${POSTGRES_PASSWORD:-farmos}@db:5432/farmos
+      REDIS_URL: redis://redis:6379/0
+      RUN_SCHEDULER: "false"
+      UPLOAD_DIR: /data
+      SLICER_BIN: /usr/local/bin/prusa-slicer
+      APP_VERSION: ${APP_VERSION:-dev}
+    volumes:
+      - uploads:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    cpus: ${SLICER_CPUS:-2.0}
+    mem_limit: ${SLICER_MEMORY:-2g}
+    command: python -m app.slicer_worker
+
   frontend:
     build:
       context: ./frontend

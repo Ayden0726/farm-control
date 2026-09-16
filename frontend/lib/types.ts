@@ -53,6 +53,16 @@ export type Printer = {
   camera_configured?: boolean;
   camera_status?: string;
   public_code?: string | null;
+  usable_x_mm?: number | null;
+  usable_y_mm?: number | null;
+  usable_z_mm?: number | null;
+  bed_shape?: string;
+  bed_origin?: string;
+  firmware?: string;
+  filament_diameter_mm?: number;
+  max_speed_mm_s?: number | null;
+  max_accel_mm_s2?: number | null;
+  max_volumetric_mm3_s?: number | null;
 };
 
 export type Job = {
@@ -177,6 +187,12 @@ export type Stl = {
   pack_bed_x_mm: number | null;
   pack_bed_y_mm: number | null;
   pack_gap_mm: number | null;
+  version?: number;
+  is_archived?: boolean;
+  production_approved?: boolean;
+  recommended_spacing_mm?: number;
+  volume_mm3?: number | null;
+  bed_warnings?: string[];
 };
 
 export type FarmSettings = {

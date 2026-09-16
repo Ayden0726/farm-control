@@ -7,8 +7,8 @@ Self-hosted production control for a 3D-printing farm. Print FarmOS is built aro
 - Next.js + React + TypeScript + Tailwind CSS (shop-floor UI)
 - FastAPI + SQLAlchemy + Alembic
 - PostgreSQL
-- Redis (scheduler lock and future job fan-out)
-- Docker Compose
+- Redis (scheduler lock, slicer job queue)
+- Docker Compose (`backend`, `worker`, `slicer-worker`, `frontend`)
 
 ## Fresh install
 
@@ -50,6 +50,29 @@ If phones or other PCs will use a specific address:
 ./install.sh --host http://192.168.1.50:3000
 ```
 
+## Production slicer (PrusaSlicer worker)
+
+FarmOS does **not** implement a slicing engine. A dedicated `slicer-worker` process (separate from uvicorn) runs **PrusaSlicer CLI**. The web API only enqueues Redis jobs (`farmos:slicer:jobs`). Slicing cannot freeze the shop-floor UI.
+
+```bash
+docker compose up -d slicer-worker
+```
+
+The worker image (`backend/Dockerfile.slicer`) installs the official PrusaSlicer Linux AppImage. CPU and RAM limits are configurable:
+
+```bash
+SLICER_CPUS=2.0 SLICER_MEMORY=2g docker compose up -d slicer-worker
+```
+
+STL uploads are capped at **80 MB** (`STL_MAX_BYTES`). Files are type-checked, names are sanitised, and the worker uses an argv list (never a shell string). Packed STLs, G-code, and slicer profiles live on the `uploads` volume (`/data/stl`, `/data/gcode`, `/data/slicer_profiles`).
+
+For local development without the AppImage, packing and plate preview still work. Slice jobs fail with a clear message unless `SLICER_BIN` points at `prusa-slicer` (or `backend/scripts/mock_prusa_slicer.py` in tests). Redis must be running for the worker to pick up jobs.
+
+```bash
+# slicer-worker (separate from the API)
+cd backend && SLICER_BIN=prusa-slicer .venv/bin/python -m app.slicer_worker
+```
+
 ## Public domain (`farm.yourdomain`)
 
 In **Settings**, set **Public domain** to your site’s name (`example.com` or `myprintshop.au`). Print FarmOS then uses `https://farm.example.com` for printed QR codes, scan links, shipping-label QR codes, and other absolute FarmOS URLs. Typing `farm.example.com` or a full URL is not prefixed twice (`farm.farm.…` is not created). `www.example.com` is treated as the public website, so FarmOS still uses `farm.example.com`. Leave the field blank on a local PC — labels keep working with `farmos:` codes and relative `/scan/…` routes.
@@ -79,7 +102,7 @@ The API is on port 8000 (`/docs` for OpenAPI).
 - The scheduler assigns queued jobs to compatible **idle** printers.
 - When a print finishes, the printer is **Waiting for Bed Clear**. Nothing else starts on that machine until an operator confirms the bed is empty.
 - **Settings → Automation** has **Assume the printer removes finished parts**, **off by default**. Print FarmOS does not command the print head to knock a part off. Turn this on only if the machine already clears the bed (belt printer, knock-off macro, etc.). Successful prints then go idle and the next job can start. Failed and cancelled prints still wait for bed clear.
-- The queue runs **G-code**, not STLs. Print FarmOS is not a slicer and cannot pack copies onto a plate or write G-code. Upload an STL to get a **grid estimate** (bounding box vs the plate size in Settings). Pack the real plate in OrcaSlicer or PrusaSlicer, then upload that G-code. A filename with a number plus `pcs` (`Handle-4pcs.gcode`, `RK-FR5-Handle-4pcs.gcode`) sets **quantity** to that many of this part on the plate. `x` plus a number (`RK-FR5-Handle-x4.gcode`, `Bracket-x4-PETG.gcode`) still works. You can still change quantity on the upload form or in the library. Print time and filament grams come from slicer **header and footer** comments (Cura, Prusa, Orca, Bambu, ideaMaker). Filenames with `2h15m` or `48g` (or similar) also set print time and filament grams when those comments are missing. Use **Library → Re-read estimates** to refresh files already on disk without re-uploading.
+- The queue runs **G-code**. Print FarmOS packs STLs on the printer’s **usable bed**, then the **slicer-worker** calls **PrusaSlicer CLI** and stores the result in the existing G-code library and print queue. Open **Slicer** (`/slicer`): choose a part → printer → Fill Plate → spacing/qty sliders → Slice → Approve & Queue. **Sliced Print Time** and filament m/g come from PrusaSlicer comments after a real slice; the live plate view shows a labelled **Pre-Slice Estimate** only. You can still upload G-code packed in Orca/PrusaSlicer on a workstation. A filename with a number plus `pcs` (`Handle-4pcs.gcode`) or `x` plus a number (`RK-FR5-Handle-x4.gcode`) sets **quantity**. Print time and filament grams also still come from slicer header/footer comments or filename tokens (`2h15m`, `48g`). Use **Library → Re-read estimates** to refresh files already on disk without re-uploading.
 - Pause, resume, reorder, cancel, and move jobs between printers.
 - Delete a production run from the list or the run page. Queued work is cancelled. Job history stays (unlinked). FarmOS refuses the delete while a plate from that run is still on a printer.
 - Job history is permanent (status changes, never deleted).
@@ -275,7 +298,10 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export DATABASE_URL=postgresql+asyncpg://farmos:farmos@127.0.0.1:5432/farmos
 alembic upgrade head
-uvicorn app.main:app --reload --port 8472
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8472
+
+# slicer-worker (optional; packing still works without PrusaSlicer)
+python -m app.slicer_worker
 
 # frontend
 cd frontend

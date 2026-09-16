@@ -162,6 +162,9 @@ async def seed_demo(db: AsyncSession) -> None:
             qr_token=new_qr_token(),
             extra_config={"sim": {"status": status.value}},
         )
+        from app.services.printer_geometry import apply_printer_geometry_defaults
+
+        apply_printer_geometry_defaults(printer)
         db.add(printer)
         printers.append(printer)
     await db.flush()

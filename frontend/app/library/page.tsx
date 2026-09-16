@@ -210,8 +210,12 @@ export default function LibraryPage() {
         <form onSubmit={uploadStl} className="space-y-3 rounded-xl border border-white/8 p-4">
           <h2 className="font-medium">Upload STL</h2>
           <p className="text-xs text-zinc-500">
-            Print FarmOS is not a slicer — it cannot write G-code or nest parts on a plate. After upload it measures
-            the model and estimates how many copies fit in a regular grid on the plate size in{" "}
+            Drop an STL to measure it, then{" "}
+            <Link href="/slicer" className="underline underline-offset-2">
+              open Slicer
+            </Link>{" "}
+            to fill a printer bed and slice with PrusaSlicer. You can still pack a plate in Orca/PrusaSlicer on a workstation and
+            upload the G-code here. Grid fit below uses the plate size in{" "}
             <Link href="/settings" className="underline underline-offset-2">
               Settings
             </Link>{" "}
@@ -413,7 +417,7 @@ export default function LibraryPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-sm font-medium text-zinc-300">STLs (estimate only)</h2>
+        <h2 className="text-sm font-medium text-zinc-300">STLs</h2>
         <Table>
           <TableHeader>
             <TableRow>
@@ -421,13 +425,14 @@ export default function LibraryPage() {
               <TableHead>Part</TableHead>
               <TableHead>Size (X×Y×Z)</TableHead>
               <TableHead>Copies on plate</TableHead>
+              <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {stls.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-zinc-500">
-                  No STLs stored. Upload a model to see a grid estimate — then still slice and upload G-code to print.
+                <TableCell colSpan={5} className="text-zinc-500">
+                  No STLs stored. Upload a model, then open Slicer to fill a plate.
                 </TableCell>
               </TableRow>
             )}
@@ -439,6 +444,11 @@ export default function LibraryPage() {
                   {mm(row.bbox_x_mm)} × {mm(row.bbox_y_mm)} × {mm(row.bbox_z_mm)}
                 </TableCell>
                 <TableCell>{packLabel(row)}</TableCell>
+                <TableCell>
+                  <Link href={`/slicer?stl_id=${row.id}${row.part_id ? `&part_id=${row.part_id}` : ""}`} className="text-amber-200 underline">
+                    Open in slicer
+                  </Link>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

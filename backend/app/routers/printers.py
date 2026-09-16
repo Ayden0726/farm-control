@@ -28,6 +28,7 @@ from app.schemas import PrinterIn, PrinterOut, PrinterUpdate
 from app.security import encrypt_secret, decrypt_secret
 from app.serialize import printer_out
 from app.services.printer_connect import normalize_base_url, probe_adapter, raise_if_offline
+from app.services.printer_geometry import apply_printer_geometry_defaults
 from app.util import new_qr_token
 
 router = APIRouter(prefix="/printers", tags=["printers"])
@@ -196,9 +197,21 @@ async def create_printer(
         unattended_mode=payload.unattended_mode or "allowed",
         avg_power_watts=payload.avg_power_watts or 180,
         machine_rate_per_hour=payload.machine_rate_per_hour or 0,
+        usable_x_mm=payload.usable_x_mm,
+        usable_y_mm=payload.usable_y_mm,
+        usable_z_mm=payload.usable_z_mm,
+        bed_shape=payload.bed_shape or "rectangular",
+        bed_origin=payload.bed_origin or "corner",
+        keepout_polygons=payload.keepout_polygons or [],
+        firmware=payload.firmware or "",
+        filament_diameter_mm=payload.filament_diameter_mm or 1.75,
+        max_speed_mm_s=payload.max_speed_mm_s,
+        max_accel_mm_s2=payload.max_accel_mm_s2,
+        max_volumetric_mm3_s=payload.max_volumetric_mm3_s,
     )
     if payload.camera_auth:
         printer.camera_auth_encrypted = encrypt_secret(payload.camera_auth)
+    apply_printer_geometry_defaults(printer)
     db.add(printer)
     await db.flush()
     from app.services.barcodes import printer_public_code, unique_public_code

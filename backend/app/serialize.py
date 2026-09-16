@@ -97,6 +97,17 @@ def printer_out(printer: Printer) -> PrinterOut:
         camera_configured=cam["configured"],
         camera_status=cam["status"],
         camera_proxy_url=cam["proxy_url"] if cam["configured"] else None,
+        usable_x_mm=getattr(printer, "usable_x_mm", None),
+        usable_y_mm=getattr(printer, "usable_y_mm", None),
+        usable_z_mm=getattr(printer, "usable_z_mm", None),
+        bed_shape=getattr(printer, "bed_shape", None) or "rectangular",
+        bed_origin=getattr(printer, "bed_origin", None) or "corner",
+        keepout_polygons=list(getattr(printer, "keepout_polygons", None) or []),
+        firmware=getattr(printer, "firmware", "") or "",
+        filament_diameter_mm=getattr(printer, "filament_diameter_mm", None) or 1.75,
+        max_speed_mm_s=getattr(printer, "max_speed_mm_s", None),
+        max_accel_mm_s2=getattr(printer, "max_accel_mm_s2", None),
+        max_volumetric_mm3_s=getattr(printer, "max_volumetric_mm3_s", None),
     )
 
 
@@ -209,6 +220,12 @@ def gcode_out(gcode: GCodeFile) -> GCodeOut:
         required_nozzle_mm=getattr(gcode, "required_nozzle_mm", None),
         unattended_approved=bool(getattr(gcode, "unattended_approved", True)),
         production_approved=bool(getattr(gcode, "production_approved", False)),
+        stl_file_id=getattr(gcode, "stl_file_id", None),
+        sliced_printer_id=getattr(gcode, "sliced_printer_id", None),
+        plate_json=getattr(gcode, "plate_json", None) or {},
+        filament_length_mm=getattr(gcode, "filament_length_mm", None),
+        filament_volume_cm3=getattr(gcode, "filament_volume_cm3", None),
+        density_g_cm3=getattr(gcode, "density_g_cm3", None),
     )
 
 

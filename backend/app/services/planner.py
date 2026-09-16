@@ -155,8 +155,22 @@ async def _workload_seconds(db: AsyncSession, printer_id: UUID) -> int:
                 PrintJob.status.in_({JobStatus.queued, JobStatus.held}),
             )
         )
-    ).scalars().all()
-    return sum(j.estimated_time_seconds or 0 for j in jobs)
+        ).scalars().all()
+    total = 0
+    from app.services.slicer_duration import scheduling_multiplier
+
+    printer = await db.get(Printer, printer_id)
+    for job in jobs:
+        gcode = None
+        if job.gcode_file_id:
+            gcode = await db.get(GCodeFile, job.gcode_file_id)
+        mult = 1.0
+        if printer:
+            mult = await scheduling_multiplier(
+                db, printer, gcode.material if gcode else None, gcode.nozzle_mm if gcode else None, None
+            )
+        total += int((job.estimated_time_seconds or 0) * mult)
+    return total
 
 
 async def recommend_printer(

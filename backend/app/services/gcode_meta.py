@@ -131,6 +131,11 @@ def parse_gcode_comments(content: str) -> dict[str, float | int | str]:
     if nozzle:
         result["nozzle_mm"] = nozzle
         result["required_nozzle_mm"] = nozzle
+    usage = filament_usage_raw(content)
+    if usage.get("filament_volume_cm3"):
+        result["filament_volume_cm3"] = usage["filament_volume_cm3"]
+    if usage.get("filament_length_mm"):
+        result["filament_length_mm"] = usage["filament_length_mm"]
     return result
 
 
@@ -430,6 +435,41 @@ def _diameter_mm(content: str) -> float:
         ),
     )
     return listed or 1.75
+
+
+def filament_usage_raw(content: str) -> dict[str, float]:
+    """Volume and length from slicer comments, without applying a guessed density."""
+    out: dict[str, float] = {}
+    cm3 = _sum_after(content, (r";\s*filament used \[cm3\]\s*=\s*([^\n;]+)",))
+    if cm3:
+        out["filament_volume_cm3"] = round(cm3, 4)
+    mm = _sum_after(
+        content,
+        (
+            r";\s*total filament length \[mm\]\s*[:=]\s*([^\n;]+)",
+            r";\s*filament used \[mm\]\s*=\s*([^\n;]+)",
+        ),
+    )
+    if mm:
+        out["filament_length_mm"] = round(mm, 3)
+        return out
+    meters = _cura_filament_meters(content)
+    if meters:
+        out["filament_length_mm"] = round(meters * 1000.0, 3)
+        return out
+    meters = _sum_after(
+        content,
+        (
+            r";\s*total filament length \[m\]\s*[:=]\s*([^\n;]+)",
+            r";\s*filament used:\s*([^\n;]+)",
+        ),
+    )
+    if meters:
+        if meters > 500:
+            out["filament_length_mm"] = round(meters, 3)
+        else:
+            out["filament_length_mm"] = round(meters * 1000.0, 3)
+    return out
 
 
 def _grams_from_length_mm(length_mm: float, diameter_mm: float, density: float) -> float:

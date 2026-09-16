@@ -86,5 +86,42 @@ endsolid test
         self.assertAlmostEqual(box.z_mm, 5, places=2)
 
 
+class StlValidationTests(unittest.TestCase):
+    def test_rejects_empty(self) -> None:
+        from app.services.stl import validate_stl
+
+        result = validate_stl("part.stl", b"", 80 * 1024 * 1024)
+        self.assertFalse(result.ok)
+
+    def test_rejects_non_stl_name(self) -> None:
+        from app.services.stl import validate_stl
+
+        result = validate_stl("part.obj", cube_stl(10), 80 * 1024 * 1024)
+        self.assertFalse(result.ok)
+
+    def test_rejects_oversized(self) -> None:
+        from app.services.stl import validate_stl
+
+        result = validate_stl("part.stl", cube_stl(10), max_bytes=10)
+        self.assertFalse(result.ok)
+
+    def test_accepts_cube(self) -> None:
+        from app.services.stl import validate_stl
+
+        result = validate_stl("handle.stl", cube_stl(20), 80 * 1024 * 1024)
+        self.assertTrue(result.ok)
+        assert result.bounds is not None
+        self.assertAlmostEqual(result.bounds.x_mm, 20, places=2)
+
+    def test_bbox_vs_bed_warning(self) -> None:
+        from app.services.stl import bed_fit_warnings, bounding_box
+
+        box = bounding_box(cube_stl(250))
+        assert box is not None
+        notes = bed_fit_warnings(box, [("K1 Max", 220.0, 220.0, 250.0)])
+        self.assertTrue(notes)
+        self.assertIn("K1 Max", notes[0])
+
+
 if __name__ == "__main__":
     unittest.main()

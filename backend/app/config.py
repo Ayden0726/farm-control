@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_from: str = ""
     sms_to: str = ""
+    slicer_bin: str = "prusa-slicer"
+    slicer_queue_key: str = "farmos:slicer:jobs"
+    stl_max_bytes: int = 80 * 1024 * 1024
+    slicer_timeout_seconds: int = 600
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -85,6 +89,14 @@ class Settings(BaseSettings):
     def shipping_labels_dir(self) -> Path:
         return self.upload_dir / "shipping_labels"
 
+    @property
+    def slicer_profiles_dir(self) -> Path:
+        return self.upload_dir / "slicer_profiles"
+
+    @property
+    def slicer_tmp_dir(self) -> Path:
+        return self.upload_dir / "slicer_tmp"
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -97,6 +109,8 @@ def get_settings() -> Settings:
         settings.backup_dir,
         settings.snapshots_dir,
         settings.shipping_labels_dir,
+        settings.slicer_profiles_dir,
+        settings.slicer_tmp_dir,
     ):
         try:
             path.mkdir(parents=True, exist_ok=True)
