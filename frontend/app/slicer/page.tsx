@@ -674,7 +674,7 @@ function SlicerPage() {
               {packing && <p className="text-sm text-zinc-500">Re-packing…</p>}
               {pack && (
                 <p className="text-sm text-zinc-300">
-                  {pack.plate.quantity} parts · {pack.spacing_mm} mm spacing · {(pack.plate.utilisation * 100).toFixed(0)}% bed used ·{" "}
+                  {pack.plate.quantity} parts · {pack.spacing_mm} mm spacing · {((pack.plate.utilisation ?? 0) * 100).toFixed(0)}% bed used ·{" "}
                   <span className="text-amber-200">Pre-Slice Estimate</span> {formatDuration(pack.pre_slice_estimate.seconds)} ·{" "}
                   {formatGramsKnown(pack.pre_slice_estimate.filament_grams)}
                 </p>
