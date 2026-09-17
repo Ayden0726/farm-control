@@ -29,6 +29,7 @@ Usage:
   ./install.sh
   ./install.sh --host http://192.168.1.50:3000
   ./install.sh --reset
+  ./wipe-and-reinstall.sh
 
 This script installs Docker if needed, writes a .env file, and starts the app
 (API, UI, scheduler worker, and the PrusaSlicer slicer-worker).
@@ -36,6 +37,7 @@ Open the printed URL and complete the first-run wizard.
 
 --reset  Stop containers and delete Postgres/Redis volumes so the setup wizard
          runs again. Shop data is wiped. The .env file is kept.
+         Prefer ./wipe-and-reinstall.sh — same wipe, easier to remember.
 EOF
       exit 0
       ;;
@@ -299,8 +301,8 @@ else
   if compose logs backend 2>/dev/null | grep -q "password authentication failed"; then
     echo
     echo "The Postgres volume still has a password from an earlier install."
-    echo "Wipe it and start clean (this deletes farm data) with:"
-    echo "  ./install.sh --reset"
+    echo "Wipe and reinstall with:"
+    echo "  ./wipe-and-reinstall.sh"
   fi
   echo
   echo "Check live logs with: docker compose logs -f"
@@ -312,7 +314,7 @@ echo
 echo "First visit opens the setup wizard at ${HOST_URL}/setup — create an admin account."
 echo "Uncheck Load demo data if this is a live shop."
 echo "Slicer:  ${HOST_URL}/slicer  (slicer-worker uses PrusaSlicer; packing still works if Slice is waiting on first start)"
-echo "If the wizard does not appear (leftover database), run: ./install.sh --reset"
+echo "If the wizard does not appear (leftover database), run: ./wipe-and-reinstall.sh"
 echo
 echo "Stop:    docker compose down"
 echo "Update:  Settings → Update Print FarmOS, or ./update.sh"

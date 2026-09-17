@@ -38,7 +38,7 @@ The script installs Docker if needed (Linux), writes `.env` with random secrets 
 
 The first image build downloads PrusaSlicer and can take several minutes. After that, open **Slicer** at `/slicer`. You do not need a second command to start the slicer worker.
 
-If login fails or the wizard does not appear, see **Clean install** below.
+If login fails or the wizard does not appear, see **Wipe and reinstall** below.
 
 If phones or other PCs will use a specific address:
 
@@ -46,48 +46,51 @@ If phones or other PCs will use a specific address:
 ./install.sh --host http://192.168.1.50:3000
 ```
 
-## Clean install (wipe shop data and run setup again)
+## Wipe and reinstall
 
 Use this when the wizard does not appear, login fails, you want a fresh database, or you are setting the farm up again on a machine that already ran FarmOS.
 
-**Linux / WSL:**
+Run it **from the folder that contains `wipe-and-reinstall.sh` and `docker-compose.yml`**. Do not `cd farm-control` if you are already in that folder. A GitHub zip is often named `farm-control-main`.
 
 ```bash
-cd farm-control
-./install.sh --reset
+ls wipe-and-reinstall.sh docker-compose.yml
+chmod +x wipe-and-reinstall.sh
+./wipe-and-reinstall.sh
+```
+
+If `./wipe-and-reinstall.sh` says **Permission denied**:
+
+```bash
+bash wipe-and-reinstall.sh
 ```
 
 **Windows (Docker Desktop):**
 
 ```powershell
-cd farm-control
-.\install.ps1 -Reset
+.\wipe-and-reinstall.ps1
 ```
 
-`--reset` stops the containers and **deletes the Postgres and Redis volumes**. That wipes orders, the print queue, inventory, users, and settings stored in the database. The setup wizard at `/setup` runs again.
+That pulls the latest git (when this folder is a clone), **deletes the database** (orders, queue, inventory, users, settings), and reinstalls the app. The setup wizard at `/setup` runs again.
 
-**Kept:** the `.env` file (secrets and `PUBLIC_APP_URL`) and uploaded files on the Docker `uploads` volume (G-code / STLs), unless you remove that volume yourself.
+**Kept:** the `.env` file (secrets and `PUBLIC_APP_URL`).
 
-Then open the URL the script prints (LAN IP and `http://127.0.0.1:3000`) and complete setup. Uncheck **Load demo data** for a live shop.
+Then open the URL the script prints (`Open:` LAN address and `Local: http://127.0.0.1:3000`) and complete setup. Uncheck **Load demo data** for a live shop.
 
-To also throw away uploaded G-code and STLs:
-
-```bash
-docker compose down -v
-./install.sh --reset
-```
+To also throw away uploaded G-code and STLs, run `docker compose down -v` first, then `./wipe-and-reinstall.sh`.
 
 ## Everyday commands
 
+Run these **from the folder that contains `install.sh`** (not from your home directory unless you `cd` there first):
+
 ```bash
-./install.sh              # first install (Linux / WSL)
-./install.sh --reset      # clean install — wipe DB, keep .env
-./update.sh               # pull GitHub and rebuild (prints the URL when done)
-docker compose down       # stop FarmOS
-./scripts/backup.sh       # Postgres dump under ./backups/
+./install.sh                 # first install (Linux / WSL)
+./wipe-and-reinstall.sh      # wipe the database and reinstall
+./update.sh                  # pull GitHub and rebuild (prints the URL when done)
+docker compose down          # stop FarmOS
+./scripts/backup.sh          # Postgres dump under ./backups/
 ```
 
-Windows: `.\install.ps1`, `.\install.ps1 -Reset`, `.\update.ps1`.
+Windows: `.\install.ps1`, `.\wipe-and-reinstall.ps1`, `.\update.ps1`.
 
 ## Production slicer (PrusaSlicer worker)
 
@@ -144,7 +147,7 @@ Slicer: http://YOUR_LAN_IP:3000/slicer
 
 `Open` uses `PUBLIC_APP_URL` from `.env` when set. Hard-refresh the browser (**Ctrl+Shift+R**) if the UI looks old.
 
-The API is on port 8000 (`/docs` for OpenAPI). This is **not** a clean install — use `./install.sh --reset` if you need an empty farm.
+The API is on port 8000 (`/docs` for OpenAPI). This is **not** a wipe — use `./wipe-and-reinstall.sh` if you need an empty farm.
 
 ## What the queue does
 
