@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -9,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models import (
     AppSetting,
     FilamentSpool,
@@ -21,9 +22,12 @@ from app.models import (
     PrintJob,
     Printer,
     User,
+    UserRole,
     utcnow,
 )
 from app.schemas import (
+    DemoModeIn,
+    DemoModeOut,
     MaintenanceIn,
     MaintenanceOut,
     NotificationOut,
@@ -43,6 +47,7 @@ from app.services.farm_settings import (
     upsert_mes,
     upsert_public_host,
 )
+from app.services.demo_mode import demo_mode_enabled
 
 notify_router = APIRouter(prefix="/notifications-legacy-removed", tags=["notifications"])
 maint_router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -324,6 +329,47 @@ async def put_settings(
     return await _settings_out(db)
 
 
+@settings_router.post("/demo-mode", response_model=DemoModeOut)
+async def set_demo_mode(
+    payload: DemoModeIn,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin)),
+):
+    from app.services.demo_mode import (
+        demo_mode_enabled,
+        disable_demo_farm,
+        request_demo_off_restart,
+    )
+
+    if payload.enabled:
+        raise HTTPException(
+            400,
+            "Demo mode can only be turned off. Wipe and reinstall, then check Load demo data on setup, to load sample data again.",
+        )
+    if not await demo_mode_enabled(db):
+        raise HTTPException(409, "Demo mode is already off.")
+    try:
+        removed = await disable_demo_farm(db)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logging.getLogger("farmos.settings").exception("failed to turn off demo mode")
+        raise HTTPException(500, "Could not remove demo farm data. Check backend logs.")
+    request_demo_off_restart()
+    settings = get_settings()
+    return DemoModeOut(
+        ok=True,
+        demo_mode=False,
+        restarting=True,
+        simulated_time_scale=settings.simulated_time_scale,
+        removed=removed,
+        message=(
+            "Demo farm data removed. Print FarmOS is restarting so print time runs at 1×. "
+            "The site may be unreachable for a minute."
+        ),
+    )
+
+
 async def _settings_out(db: AsyncSession) -> SettingsOut:
     settings = get_settings()
     company = await db.get(AppSetting, "company_name")
@@ -350,6 +396,7 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
         public_domain=public["public_domain"],
         public_farm_host=public["public_farm_host"],
         public_farm_url=public["public_farm_url"],
+        demo_mode=await demo_mode_enabled(db),
         **{k: mes[k] for k in mes},
     )
 

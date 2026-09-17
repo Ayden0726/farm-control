@@ -88,6 +88,62 @@ def write_heartbeat(folder: Path) -> None:
     (folder / "heartbeat").write_text(f"{int(time.time())}\n", encoding="ascii")
 
 
+_ENV_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+
+def set_dotenv_key(path: Path, key: str, value: str) -> None:
+    """Create or replace KEY=value in a .env file without touching other lines."""
+    if not _ENV_KEY_RE.match(key):
+        raise ValueError(f"invalid env key: {key}")
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = text.splitlines()
+    found = False
+    out: list[str] = []
+    prefix = f"{key}="
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith(prefix) and not stripped.startswith("#"):
+            out.append(f"{key}={value}")
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        if out and out[-1] != "":
+            out.append("")
+        out.append(f"{key}={value}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def apply_dotenv_updates(path: Path, updates: dict[str, str]) -> None:
+    for key, value in updates.items():
+        set_dotenv_key(path, key, str(value))
+
+
+def parse_restart_env(text: str) -> dict[str, str]:
+    updates: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("\ufeff").replace("\r", "")
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if _ENV_KEY_RE.match(key):
+            updates[key] = value.strip()
+    return updates
+
+
+def write_restart_request(*, reason: str = "settings", env: dict[str, str] | None = None) -> Path:
+    folder = control_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    env = env or {}
+    if env:
+        lines = [f"{key}={value}" for key, value in env.items() if _ENV_KEY_RE.match(key)]
+        (folder / "restart.env").write_text("\n".join(lines) + "\n", encoding="ascii")
+    (folder / "restart").write_text(f"{reason}\n", encoding="ascii")
+    return folder
+
+
 def farm_root() -> Path | None:
     env = os.environ.get("FARMOS_ROOT", "").strip()
     candidates = [Path(env)] if env else []

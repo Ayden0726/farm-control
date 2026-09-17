@@ -661,6 +661,7 @@ class SettingsOut(BaseModel):
     backup_retention_days: int = 14
     backup_include_files: bool = False
     include_camera_in_notifications: bool = False
+    demo_mode: bool = False
 
 
 class SettingsIn(BaseModel):
@@ -691,3 +692,16 @@ class SettingsIn(BaseModel):
     backup_retention_days: int | None = None
     backup_include_files: bool | None = None
     include_camera_in_notifications: bool | None = None
+
+
+class DemoModeIn(BaseModel):
+    enabled: bool
+
+
+class DemoModeOut(BaseModel):
+    ok: bool
+    demo_mode: bool
+    restarting: bool
+    message: str
+    simulated_time_scale: float
+    removed: dict[str, int] = Field(default_factory=dict)

@@ -41,6 +41,7 @@ from app.services.gcode_meta import (
     apply_filename_time_fallback,
     parse_gcode_file_bytes,
 )
+from app.services.demo_mode import DEMO_MODE_KEY, mark_demo_if_present, upsert_app_setting
 from app.services.inventory import get_or_create_stock
 from app.util import new_qr_token, parse_quantity_from_filename
 
@@ -92,6 +93,7 @@ M84
 async def seed_demo(db: AsyncSession) -> None:
     existing = (await db.execute(select(Part).limit(1))).scalar_one_or_none()
     if existing:
+        await mark_demo_if_present(db)
         return
 
     settings = get_settings()
@@ -605,4 +607,5 @@ async def seed_demo(db: AsyncSession) -> None:
     from app.seed_filament import ensure_filament_system
 
     await ensure_filament_system(db)
+    await upsert_app_setting(db, DEMO_MODE_KEY, True)
     await db.flush()

@@ -226,6 +226,7 @@ export type FarmSettings = {
   public_domain?: string;
   public_farm_host?: string;
   public_farm_url?: string;
+  demo_mode?: boolean;
 };
 
 export type Spool = {

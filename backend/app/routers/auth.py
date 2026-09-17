@@ -10,6 +10,7 @@ from app.models import AppSetting, User, UserRole
 from app.schemas import LoginIn, SetupIn, SetupStatus, TokenOut, UserOut
 from app.security import create_access_token, hash_password, verify_password
 from app.seed import seed_demo
+from app.services.demo_mode import DEMO_MODE_KEY, upsert_app_setting
 from app.deps import get_current_user
 
 logger = logging.getLogger("farmos.auth")
@@ -80,6 +81,13 @@ async def setup(payload: SetupIn, db: AsyncSession = Depends(get_db)) -> TokenOu
             await db.commit()
         except Exception:
             logger.exception("demo seed failed; admin account was still created")
+            await db.rollback()
+    else:
+        try:
+            await upsert_app_setting(db, DEMO_MODE_KEY, False)
+            await db.commit()
+        except Exception:
+            logger.exception("could not record demo_mode=off")
             await db.rollback()
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     token = create_access_token(user.id, role)

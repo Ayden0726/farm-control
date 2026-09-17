@@ -15,7 +15,13 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.services.update_control import control_dir, farm_root, write_heartbeat
+from app.services.update_control import (
+    apply_dotenv_updates,
+    control_dir,
+    farm_root,
+    parse_restart_env,
+    write_heartbeat,
+)
 
 logger = logging.getLogger("farmos.update")
 
@@ -27,6 +33,52 @@ def _write_status(folder: Path, status: str, message: str) -> None:
         "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     (folder / "status.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _run_restart(root: Path, folder: Path, updates: dict[str, str]) -> int:
+    if updates:
+        apply_dotenv_updates(root / ".env", updates)
+    log_path = folder / "log.txt"
+    cmd = [
+        "docker",
+        "compose",
+        "up",
+        "-d",
+        "--no-build",
+        "--force-recreate",
+        "backend",
+        "worker",
+        "slicer-worker",
+    ]
+    with log_path.open("w", encoding="utf-8") as log:
+        log.write("Restarting FarmOS so settings take effect.\n")
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(root),
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            return int(proc.returncode)
+        except FileNotFoundError:
+            log.write("docker was not found. .env was updated; restart the FarmOS stack by hand.\n")
+            return 0
+
+
+def _consume_restart(folder: Path) -> dict[str, str]:
+    updates: dict[str, str] = {}
+    env_file = folder / "restart.env"
+    if env_file.exists():
+        try:
+            updates = parse_restart_env(env_file.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            updates = {}
+        try:
+            env_file.unlink()
+        except OSError:
+            pass
+    return updates
 
 
 def _run_update_script(root: Path, folder: Path) -> int:
@@ -76,6 +128,38 @@ async def update_agent_loop() -> None:
     while True:
         try:
             write_heartbeat(folder)
+            restart = folder / "restart"
+            if restart.exists() and exclusive:
+                try:
+                    restart.unlink()
+                except OSError:
+                    pass
+                updates = _consume_restart(folder)
+                if root is None:
+                    _write_status(
+                        folder,
+                        "error",
+                        "Restart was requested but FarmOS could not find docker-compose.yml.",
+                    )
+                else:
+                    _write_status(
+                        folder,
+                        "restarting",
+                        "Restarting Print FarmOS so demo mode and time scale take effect.",
+                    )
+                    code = await asyncio.to_thread(_run_restart, root, folder, updates)
+                    if code == 0:
+                        _write_status(
+                            folder,
+                            "ok",
+                            "Restart finished. Hard-refresh the browser if the UI looks old.",
+                        )
+                    else:
+                        _write_status(
+                            folder,
+                            "error",
+                            "Restart failed. Check the log below or run docker compose up -d.",
+                        )
             request = folder / "request"
             if request.exists() and exclusive:
                 try:

@@ -43,6 +43,7 @@ export default function SettingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [turningOffDemo, setTurningOffDemo] = useState(false);
   const [mes, setMes] = useState({
     auto_requeue_failed_qc: true,
     electricity_price_per_kwh: "0.32",
@@ -193,6 +194,54 @@ export default function SettingsPage() {
     }
   }
 
+  async function turnOffDemo() {
+    if (
+      !window.confirm(
+        "Turn off demo mode? Sample Flex Rack 5 data and simulated printers will be deleted, then FarmOS will restart. Your admin login stays.",
+      )
+    ) {
+      return;
+    }
+    setTurningOffDemo(true);
+    try {
+      await api<{ ok: boolean; message: string; demo_mode: boolean; simulated_time_scale: number }>(
+        "/api/v1/settings/demo-mode",
+        {
+          method: "POST",
+          body: JSON.stringify({ enabled: false }),
+          signal: AbortSignal.timeout(60000),
+        },
+      );
+      toast.success("Demo mode is off. FarmOS is restarting…");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not turn off demo mode";
+      if (!/failed to fetch|network|abort|502|503|504/i.test(message) && !message.includes("Demo mode is already off")) {
+        setTurningOffDemo(false);
+        toast.error(message);
+        return;
+      }
+    }
+    const started = Date.now();
+    let sawDown = false;
+    while (Date.now() - started < 180000) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const s = await api<Settings>("/api/v1/settings", { signal: AbortSignal.timeout(5000) });
+        if (sawDown && !s.demo_mode) {
+          window.location.reload();
+          return;
+        }
+        if (!s.demo_mode && s.simulated_time_scale <= 1.01) {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        sawDown = true;
+      }
+    }
+    window.location.reload();
+  }
+
   if (loadError) {
     return <div className="text-red-300">{loadError}</div>;
   }
@@ -249,6 +298,26 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </form>
+      {settings.demo_mode ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Demo mode</CardTitle>
+            <CardDescription>
+              This farm was set up with sample Flex Rack 5 jobs, simulated printers, and sped-up print time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-zinc-400">
+              Turning demo mode off removes that sample farm (simulated printers, the RK-FR5 catalog, demo jobs and
+              orders). Your admin account, real printers, and files you uploaded stay. Print time goes back to 1× and
+              FarmOS restarts so the change takes effect. The site may be unreachable for about a minute.
+            </p>
+            <Button type="button" variant="destructive" disabled={turningOffDemo} onClick={turnOffDemo}>
+              {turningOffDemo ? "Turning off demo mode and restarting…" : "Turn off demo mode and restart"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
       <form onSubmit={save} className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -260,8 +329,11 @@ export default function SettingsPage() {
               <Input value={company} onChange={(e) => setCompany(e.target.value)} />
             </div>
             <p className="text-xs text-zinc-500">
-              Simulated printers run at {settings.simulated_time_scale}× so the queue is usable without overnight
-              waits. Change SIMULATED_TIME_SCALE in .env.
+              {settings.demo_mode
+                ? `Simulated printers run at ${settings.simulated_time_scale}× so the queue is usable without overnight waits. Turn demo mode off above to restart at 1×.`
+                : settings.simulated_time_scale > 1
+                  ? `Simulated printers run at ${settings.simulated_time_scale}×. Change SIMULATED_TIME_SCALE in .env if you still have simulated machines.`
+                  : "Print time runs at wall clock (1×)."}
             </p>
             <Button type="submit">Save farm settings</Button>
           </CardContent>

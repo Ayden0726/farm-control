@@ -33,7 +33,7 @@ The GitHub repo is private, so Git will ask you to sign in. Use a [personal acce
 The script installs Docker if needed (Linux), writes `.env` with random secrets (including slicer CPU/RAM limits), and starts the stack: API, UI, scheduler worker, **and slicer-worker** (PrusaSlicer). Open the URL it prints (usually `http://YOUR_SERVER_IP:3000`). First visit should land on `/setup`.
 
 1. Complete the first-run setup wizard (admin account).
-2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm (includes a sample handle STL for **Slicer**).
+2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm (includes a sample handle STL for **Slicer**). To leave demo later, open **Settings → Demo mode** and choose **Turn off demo mode and restart**. That removes the sample Flex Rack 5 farm and simulated printers, sets print time to 1×, and restarts the app. Your admin account stays.
 3. Add real printers (OctoPrint, Moonraker/Klipper, Creality K1/K2) when ready.
 
 The first image build downloads PrusaSlicer and can take several minutes. After that, open **Slicer** at `/slicer`. You do not need a second command to start the slicer worker.
@@ -122,6 +122,16 @@ cd backend && SLICER_BIN=prusa-slicer .venv/bin/python -m app.slicer_worker
 In **Settings**, set **Public domain** to your site’s name (`example.com` or `myprintshop.au`). Print FarmOS then uses `https://farm.example.com` for printed QR codes, scan links, shipping-label QR codes, and other absolute FarmOS URLs. Typing `farm.example.com` or a full URL is not prefixed twice (`farm.farm.…` is not created). `www.example.com` is treated as the public website, so FarmOS still uses `farm.example.com`. Leave the field blank on a local PC — labels keep working with `farmos:` codes and relative `/scan/…` routes.
 
 This field does not create DNS or TLS. Point an A or CNAME record for `farm.yourdomain` at this machine (or your reverse proxy). Localhost and LAN IPs are stored as typed, without a `farm.` prefix.
+
+## Demo mode
+
+If you checked **Load demo data** at setup, **Settings → Demo mode** can turn it off without wiping the database.
+
+**Turn off demo mode and restart** removes the sample Flex Rack 5 catalog, simulated printers, demo jobs, and demo orders. It writes `SIMULATED_TIME_SCALE=1` into `.env` and recreates the API/worker containers so print time runs at wall clock. Your admin login, real printers, store credentials, and files you uploaded stay.
+
+The site is unreachable for about a minute while containers restart. Refresh if the UI still looks like the demo farm.
+
+To load demo data again, run `./wipe-and-reinstall.sh` and check **Load demo data** on the setup wizard.
 
 ## Update
 
@@ -283,7 +293,7 @@ Important keys:
 
 - `SECRET_KEY` — JWT and credential encryption
 - `POSTGRES_PASSWORD`
-- `SIMULATED_TIME_SCALE` — demo printers run faster than wall clock
+- `SIMULATED_TIME_SCALE` — demo printers run faster than wall clock. **Settings → Demo mode** sets this to `1` and restarts the stack.
 - WooCommerce, Shopify, Australia Post, and SMTP / `NOTIFY_WEBHOOK_URL` as needed
 - Phone push: `NTFY_*`, `PUBLIC_APP_URL`, optional Pushover / Discord / Telegram / Twilio
 
