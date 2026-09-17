@@ -92,6 +92,19 @@ services:
     mem_limit: ${SLICER_MEMORY:-2g}
     command: python -m app.slicer_worker
 
+  update-agent:
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.update-agent
+    working_dir: /farm
+    environment:
+      FARMOS_ROOT: /farm
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/farm
+    restart: unless-stopped
+    command: bash /farm/scripts/update-agent.sh
+
   frontend:
     build:
       context: ./frontend

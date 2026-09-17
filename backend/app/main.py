@@ -94,16 +94,26 @@ async def lifespan(app: FastAPI):
             logger.exception("startup seed failed — API will still serve first-run setup")
             await db.rollback()
     task = None
+    update_task = None
     if settings.run_scheduler:
         task = asyncio.create_task(_scheduler_loop())
         logger.info("FarmOS scheduler started")
+    try:
+        from app.services.update_agent import maybe_touch_heartbeat, update_agent_loop
+
+        maybe_touch_heartbeat()
+        update_task = asyncio.create_task(update_agent_loop())
+        logger.info("FarmOS update agent started")
+    except Exception:
+        logger.exception("update agent failed to start — Settings → Update may stay unavailable")
     yield
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    for pending in (task, update_task):
+        if pending:
+            pending.cancel()
+            try:
+                await pending
+            except asyncio.CancelledError:
+                pass
 
 
 def create_app() -> FastAPI:

@@ -48,7 +48,9 @@ fi
 export APP_VERSION
 
 echo "==> Rebuilding Print FarmOS ${APP_VERSION} (database and G-code uploads are kept)"
-compose up -d --build
+# Do not rebuild update-agent here — that container is applying this update.
+compose up -d --build db redis backend worker slicer-worker frontend
+compose up -d --no-build update-agent 2>/dev/null || true
 
 echo
 echo "Update complete. Open the FarmOS URL in your browser."

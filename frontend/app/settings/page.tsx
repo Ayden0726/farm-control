@@ -592,16 +592,17 @@ export default function SettingsPage() {
             {update?.message ||
               "Pull the latest Print FarmOS from GitHub and rebuild. The database and G-code uploads are kept."}
           </p>
-          <Button onClick={runUpdate} disabled={busy || update?.available === false}>
-            {busy ? "Updating… this can take several minutes" : "Update Print FarmOS"}
+          <Button onClick={runUpdate} disabled={updating}>
+            {updating ? "Updating… this can take several minutes" : "Update Print FarmOS"}
           </Button>
-          {update?.available === false && (
-            <p className="text-xs text-amber-200">
-              One-click update starts after you run <span className="font-mono">./update.sh</span> on the
-              server once (Windows: <span className="font-mono">.\update.ps1</span>). Then this button works.
+          {update?.status === "unavailable" && !updating && (
+            <p className="text-xs text-zinc-500">
+              The updater starts with the FarmOS stack. If a click fails, run{" "}
+              <span className="font-mono">./update.sh</span> on the server (Windows:{" "}
+              <span className="font-mono">.\update.ps1</span>).
             </p>
           )}
-          {update?.log_tail && (busy || update.status === "error") && (
+          {update?.log_tail && (updating || update.status === "error" || update.status === "ok") && (
             <pre className="max-h-48 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-zinc-400">
               {update.log_tail}
             </pre>

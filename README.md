@@ -95,7 +95,7 @@ The first time (or after a reboot if the updater is not installed as a service),
 
 Windows with Docker Desktop: `.\update.ps1`
 
-That pulls the latest code and rebuilds containers. Postgres data and uploaded G-code are kept.
+That pulls the latest code and rebuilds containers (including the slicer-worker). Postgres data and uploaded G-code are kept. **Settings → Update Print FarmOS** is enabled once the stack is up — the API keeps a heartbeat and the `update-agent` container (or the in-process updater) runs `./update.sh` when you press the button.
 
 The API is on port 8000 (`/docs` for OpenAPI).
 

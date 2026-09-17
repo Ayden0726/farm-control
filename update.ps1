@@ -28,8 +28,9 @@ if (Test-Path ".\.env") {
 }
 
 Write-Host "==> Rebuilding Print FarmOS $version (database and G-code uploads are kept)"
-docker compose up -d --build
+docker compose up -d --build db redis backend worker slicer-worker frontend
 if ($LASTEXITCODE -ne 0) { Write-Error "docker compose failed" }
+docker compose up -d --no-build update-agent
 
 Write-Host ""
 Write-Host "Update complete. Open the FarmOS URL in your browser."

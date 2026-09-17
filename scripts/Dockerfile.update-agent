@@ -1,0 +1,12 @@
+FROM docker:27-cli
+
+RUN apk add --no-cache git bash util-linux
+
+WORKDIR /farm
+ENV FARMOS_ROOT=/farm
+CMD ["bash", "/farm/scripts/update-agent.sh"]
+
+
+WORKDIR /farm
+ENV FARMOS_ROOT=/farm
+CMD ["bash", "/farm/scripts/update-agent.sh"]

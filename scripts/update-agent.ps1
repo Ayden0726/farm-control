@@ -15,7 +15,7 @@ function Write-Status([string]$Status, [string]$Message) {
 Write-Status "idle" "Waiting for an update from Settings."
 
 while ($true) {
-  [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) | Set-Content (Join-Path $Dir "heartbeat")
+  [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) | Set-Content -Path (Join-Path $Dir "heartbeat") -Encoding ascii
   $request = Join-Path $Dir "request"
   if (Test-Path $request) {
     Remove-Item $request -Force
