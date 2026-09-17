@@ -15,6 +15,8 @@ import { QrDialog } from "@/components/qr-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { PrinterCamera } from "@/components/printer-camera";
+import { NozzleFields } from "@/components/nozzle-fields";
+import { optionalMm } from "@/lib/printer-geometry";
 
 export default function PrinterDetailPage() {
   const params = useParams<{ id: string }>();
@@ -54,6 +56,11 @@ export default function PrinterDetailPage() {
   });
   const [downtimeReason, setDowntimeReason] = useState("planned_maintenance");
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [maintKind, setMaintKind] = useState("service");
+  const [maintNozzle, setMaintNozzle] = useState("");
+  const [maintNozzleMaterial, setMaintNozzleMaterial] = useState("");
+  const [loggingMaint, setLoggingMaint] = useState(false);
 
   async function load() {
     const p = await api<Printer>(`/api/v1/printers/${params.id}`);
@@ -61,6 +68,9 @@ export default function PrinterDetailPage() {
     setNotes(p.maintenance_notes);
     setIntervalHours(String(p.maintenance_interval_hours));
     setBaseUrl(p.base_url || "");
+    setMaintNozzle(p.nozzle_diameter_mm != null ? String(p.nozzle_diameter_mm) : "0.4");
+    setMaintNozzleMaterial(p.nozzle_material || "Brass");
+    setTemplateName(p.model ? `${p.model} ${p.nozzle_diameter_mm ?? ""}mm`.trim() : p.name);
     setProfile({
       build_x_mm: p.build_x_mm != null ? String(p.build_x_mm) : "",
       build_y_mm: p.build_y_mm != null ? String(p.build_y_mm) : "",
@@ -209,18 +219,53 @@ export default function PrinterDetailPage() {
             <Label>Notes</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
+          <div className="space-y-1">
+            <Label>Kind</Label>
+            <select
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+              value={maintKind}
+              onChange={(e) => setMaintKind(e.target.value)}
+            >
+              <option value="service">Service</option>
+              <option value="nozzle">Nozzle change</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <NozzleFields
+            diameter={maintNozzle}
+            material={maintNozzleMaterial}
+            onDiameter={setMaintNozzle}
+            onMaterial={setMaintNozzleMaterial}
+          />
+          <p className="text-xs text-zinc-500">
+            Logging a nozzle size updates this printer and writes it on the maintenance history. The slicer uses the
+            installed nozzle for packing.
+          </p>
           <Button
             variant="outline"
+            disabled={loggingMaint}
             onClick={async () => {
-              await api(`/api/v1/maintenance/${printer.id}`, {
-                method: "POST",
-                body: JSON.stringify({ notes: "Shop-floor service logged from printer page", kind: "service" }),
-              });
-              toast.success("Maintenance logged — print-hour counter reset.");
-              load();
+              setLoggingMaint(true);
+              try {
+                await api(`/api/v1/maintenance/${printer.id}`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    notes: notes || undefined,
+                    kind: maintKind,
+                    nozzle_diameter_mm: optionalMm(maintNozzle),
+                    nozzle_material: maintNozzleMaterial,
+                  }),
+                });
+                toast.success("Maintenance logged — nozzle and print-hour counter saved.");
+                load();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Could not log maintenance");
+              } finally {
+                setLoggingMaint(false);
+              }
             }}
           >
-            Log maintenance now
+            {loggingMaint ? "Saving…" : "Log maintenance"}
           </Button>
         </CardContent>
       </Card>
@@ -326,8 +371,6 @@ export default function PrinterDetailPage() {
             ["usable_x_mm", "Usable X mm"],
             ["usable_y_mm", "Usable Y mm"],
             ["usable_z_mm", "Usable Z mm"],
-            ["nozzle_diameter_mm", "Nozzle mm"],
-            ["nozzle_material", "Nozzle material"],
             ["supported_materials", "Materials (comma)"],
             ["max_nozzle_temp_c", "Max nozzle °C"],
             ["max_bed_temp_c", "Max bed °C"],
@@ -345,6 +388,14 @@ export default function PrinterDetailPage() {
               />
             </div>
           ))}
+          <div className="md:col-span-3">
+            <NozzleFields
+              diameter={profile.nozzle_diameter_mm}
+              material={profile.nozzle_material}
+              onDiameter={(nozzle_diameter_mm) => setProfile({ ...profile, nozzle_diameter_mm })}
+              onMaterial={(nozzle_material) => setProfile({ ...profile, nozzle_material })}
+            />
+          </div>
           <div className="space-y-1">
             <Label>Unattended mode</Label>
             <select
@@ -422,6 +473,36 @@ export default function PrinterDetailPage() {
           >
             Save compatibility profile
           </Button>
+          <div className="md:col-span-3 flex flex-col gap-2 rounded-lg border border-white/8 p-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1">
+              <Label>Save as printer template</Label>
+              <Input
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="K1 Max 300mm 0.4"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await api("/api/v1/printers/templates", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      name: templateName.trim() || printer.name,
+                      printer_id: printer.id,
+                    }),
+                  });
+                  toast.success("Template saved. Use it when adding another printer with the same plate and nozzle.");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not save template");
+                }
+              }}
+            >
+              Save template
+            </Button>
+          </div>
         </CardContent>
       </Card>
       <Card className="lg:col-span-3">

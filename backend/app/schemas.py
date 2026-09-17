@@ -80,6 +80,7 @@ class PrinterIn(BaseModel):
     max_speed_mm_s: float | None = None
     max_accel_mm_s2: float | None = None
     max_volumetric_mm3_s: float | None = None
+    template_id: UUID | None = None
 
 
 class PrinterUpdate(BaseModel):
@@ -597,6 +598,8 @@ class MaintenanceIn(BaseModel):
     notes: str = ""
     kind: str = "service"
     hours_at_service: float | None = None
+    nozzle_diameter_mm: float | None = Field(default=None, gt=0, le=2)
+    nozzle_material: str | None = None
 
 
 class MaintenanceOut(BaseModel):
@@ -607,6 +610,26 @@ class MaintenanceOut(BaseModel):
     hours_at_service: float
     kind: str
     notes: str
+    nozzle_diameter_mm: float | None = None
+    previous_nozzle_diameter_mm: float | None = None
+    nozzle_material: str = ""
+    previous_nozzle_material: str = ""
+
+
+class PrinterTemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    printer_id: UUID
+    notes: str = ""
+
+
+class PrinterTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    notes: str = ""
+    source_printer_id: UUID | None = None
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
 
 
 class BinIn(BaseModel):

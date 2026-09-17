@@ -22,6 +22,9 @@ type Log = {
   hours_at_service: number;
   kind: string;
   notes: string;
+  nozzle_diameter_mm?: number | null;
+  previous_nozzle_diameter_mm?: number | null;
+  nozzle_material?: string;
 };
 
 type Task = {
@@ -124,7 +127,11 @@ export default function MaintenancePage() {
           {logs.map((l) => (
             <div key={l.id}>
               <span className="text-zinc-400">{new Date(l.performed_at).toLocaleString()}</span> · {l.printer_name} ·{" "}
-              {l.hours_at_service.toFixed(1)} h · {l.notes}
+              {l.kind}
+              {l.nozzle_diameter_mm
+                ? ` · nozzle ${l.previous_nozzle_diameter_mm ?? "—"} → ${l.nozzle_diameter_mm} mm`
+                : ""}{" "}
+              · {l.hours_at_service.toFixed(1)} h · {l.notes}
             </div>
           ))}
         </CardContent>

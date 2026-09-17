@@ -14,6 +14,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatDuration, formatHours } from "@/lib/format";
 import { toast } from "sonner";
 import { QrDialog } from "@/components/qr-dialog";
+import { NozzleFields } from "@/components/nozzle-fields";
+import { mmString, modelPlateHint, optionalMm, type PrinterTemplate } from "@/lib/printer-geometry";
 
 const URL_HINT: Record<string, string> = {
   octoprint: "http://192.168.1.50",
@@ -35,10 +37,22 @@ export default function PrintersPage() {
     adapter_type: "octoprint",
     base_url: "",
     api_key: "",
+    template_id: "",
+    build_x_mm: "",
+    build_y_mm: "",
+    build_z_mm: "",
+    nozzle_diameter_mm: "0.4",
+    nozzle_material: "Brass",
   });
+  const [templates, setTemplates] = useState<PrinterTemplate[]>([]);
 
   async function load() {
-    setPrinters(await api<Printer[]>("/api/v1/printers"));
+    const [rows, tmpl] = await Promise.all([
+      api<Printer[]>("/api/v1/printers"),
+      api<PrinterTemplate[]>("/api/v1/printers/templates").catch(() => [] as PrinterTemplate[]),
+    ]);
+    setPrinters(rows);
+    setTemplates(tmpl);
   }
   useEffect(() => {
     load();
@@ -60,9 +74,20 @@ export default function PrintersPage() {
       const saved = await api<Printer>("/api/v1/printers", {
         method: "POST",
         body: JSON.stringify({
-          ...form,
+          name: form.name,
+          model: form.model,
+          adapter_type: form.adapter_type,
           base_url: form.base_url || null,
           api_key: form.api_key || null,
+          template_id: form.template_id || null,
+          build_x_mm: optionalMm(form.build_x_mm),
+          build_y_mm: optionalMm(form.build_y_mm),
+          build_z_mm: optionalMm(form.build_z_mm),
+          usable_x_mm: optionalMm(form.build_x_mm),
+          usable_y_mm: optionalMm(form.build_y_mm),
+          usable_z_mm: optionalMm(form.build_z_mm),
+          nozzle_diameter_mm: optionalMm(form.nozzle_diameter_mm),
+          nozzle_material: form.nozzle_material,
         }),
         signal: AbortSignal.timeout(45000),
       });
@@ -72,7 +97,19 @@ export default function PrintersPage() {
           : "Connection verified. Printer saved.",
       );
       setOpen(false);
-      setForm({ name: "", model: "", adapter_type: "octoprint", base_url: "", api_key: "" });
+      setForm({
+        name: "",
+        model: "",
+        adapter_type: "octoprint",
+        base_url: "",
+        api_key: "",
+        template_id: "",
+        build_x_mm: "",
+        build_y_mm: "",
+        build_z_mm: "",
+        nozzle_diameter_mm: "0.4",
+        nozzle_material: "Brass",
+      });
       load();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not add printer";
@@ -135,11 +172,49 @@ export default function PrintersPage() {
           }}
         >
           <DialogTrigger render={<Button />}>Add printer</DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Add printer</DialogTitle>
             </DialogHeader>
             <form onSubmit={onCreate} className="space-y-3">
+              {templates.length > 0 && (
+                <div className="space-y-1">
+                  <Label>Start from template</Label>
+                  <select
+                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                    value={form.template_id}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const tmpl = templates.find((t) => t.id === id);
+                      const snap = tmpl?.snapshot || {};
+                      setForm((cur) => ({
+                        ...cur,
+                        template_id: id,
+                        model: typeof snap.model === "string" && snap.model ? snap.model : cur.model,
+                        adapter_type:
+                          typeof snap.adapter_type === "string" && snap.adapter_type
+                            ? String(snap.adapter_type)
+                            : cur.adapter_type,
+                        build_x_mm: mmString(snap.usable_x_mm ?? snap.build_x_mm) || cur.build_x_mm,
+                        build_y_mm: mmString(snap.usable_y_mm ?? snap.build_y_mm) || cur.build_y_mm,
+                        build_z_mm: mmString(snap.usable_z_mm ?? snap.build_z_mm) || cur.build_z_mm,
+                        nozzle_diameter_mm: mmString(snap.nozzle_diameter_mm) || cur.nozzle_diameter_mm,
+                        nozzle_material:
+                          typeof snap.nozzle_material === "string" && snap.nozzle_material
+                            ? snap.nozzle_material
+                            : cur.nozzle_material,
+                      }));
+                    }}
+                  >
+                    <option value="">Blank — enter plate size below</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="space-y-1">
                 <Label>Name</Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -149,7 +224,18 @@ export default function PrintersPage() {
                 <Input
                   placeholder="Creality K1 Max"
                   value={form.model}
-                  onChange={(e) => setForm({ ...form, model: e.target.value })}
+                  onChange={(e) => {
+                    const model = e.target.value;
+                    const hint = modelPlateHint(model);
+                    setForm((cur) => ({
+                      ...cur,
+                      model,
+                      build_x_mm: cur.build_x_mm || hint?.x || "",
+                      build_y_mm: cur.build_y_mm || hint?.y || "",
+                      build_z_mm: cur.build_z_mm || hint?.z || "",
+                      nozzle_diameter_mm: cur.nozzle_diameter_mm || hint?.nozzle || "",
+                    }));
+                  }}
                 />
               </div>
               <div className="space-y-1">
@@ -190,6 +276,48 @@ export default function PrintersPage() {
                   </div>
                 </>
               )}
+              <div className="space-y-2 rounded-lg border border-white/8 p-3">
+                <div className="text-sm font-medium">Build plate</div>
+                <p className="text-xs text-zinc-500">
+                  Usable print area in millimetres. The slicer packs parts to this size. Known models (K1 Max, CR-6,
+                  Voron) fill in a starting size from the model name.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label>X mm</Label>
+                    <Input
+                      inputMode="decimal"
+                      value={form.build_x_mm}
+                      onChange={(e) => setForm({ ...form, build_x_mm: e.target.value })}
+                      placeholder="300"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Y mm</Label>
+                    <Input
+                      inputMode="decimal"
+                      value={form.build_y_mm}
+                      onChange={(e) => setForm({ ...form, build_y_mm: e.target.value })}
+                      placeholder="300"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Z mm</Label>
+                    <Input
+                      inputMode="decimal"
+                      value={form.build_z_mm}
+                      onChange={(e) => setForm({ ...form, build_z_mm: e.target.value })}
+                      placeholder="250"
+                    />
+                  </div>
+                </div>
+                <NozzleFields
+                  diameter={form.nozzle_diameter_mm}
+                  material={form.nozzle_material}
+                  onDiameter={(nozzle_diameter_mm) => setForm({ ...form, nozzle_diameter_mm })}
+                  onMaterial={(nozzle_material) => setForm({ ...form, nozzle_material })}
+                />
+              </div>
               {error && (
                 <Alert variant="destructive">
                   <AlertTitle>Could not connect</AlertTitle>

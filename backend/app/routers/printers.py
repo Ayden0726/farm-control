@@ -19,16 +19,18 @@ from app.models import (
     PrinterAdapterType,
     PrinterNotificationPreference,
     PrinterStatus,
+    PrinterTemplate,
     ProductionRunPrinter,
     StorageLocation,
     User,
     utcnow,
 )
-from app.schemas import PrinterIn, PrinterOut, PrinterUpdate
+from app.schemas import PrinterIn, PrinterOut, PrinterTemplateIn, PrinterTemplateOut, PrinterUpdate
 from app.security import encrypt_secret, decrypt_secret
 from app.serialize import printer_out
 from app.services.printer_connect import normalize_base_url, probe_adapter, raise_if_offline
 from app.services.printer_geometry import apply_printer_geometry_defaults
+from app.services.printer_templates import apply_snapshot, printer_snapshot
 from app.util import new_qr_token
 
 router = APIRouter(prefix="/printers", tags=["printers"])
@@ -143,6 +145,54 @@ async def test_printer_connection(payload: PrinterIn, _: User = Depends(get_curr
     }
 
 
+@router.get("/templates", response_model=list[PrinterTemplateOut])
+async def list_printer_templates(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    rows = (await db.execute(select(PrinterTemplate).order_by(PrinterTemplate.name))).scalars().all()
+    return rows
+
+
+@router.post("/templates", response_model=PrinterTemplateOut)
+async def create_printer_template(
+    payload: PrinterTemplateIn, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    printer = await db.get(Printer, payload.printer_id)
+    if not printer:
+        raise HTTPException(404, "Printer not found")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(400, "Template name is required")
+    existing = (await db.execute(select(PrinterTemplate).where(PrinterTemplate.name == name))).scalar_one_or_none()
+    if existing:
+        existing.notes = payload.notes.strip()
+        existing.source_printer_id = printer.id
+        existing.snapshot = printer_snapshot(printer)
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+    row = PrinterTemplate(
+        name=name,
+        notes=payload.notes.strip(),
+        source_printer_id=printer.id,
+        snapshot=printer_snapshot(printer),
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.delete("/templates/{template_id}")
+async def delete_printer_template(
+    template_id: UUID, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
+):
+    row = await db.get(PrinterTemplate, template_id)
+    if not row:
+        raise HTTPException(404, "Template not found")
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("", response_model=PrinterOut)
 async def create_printer(
     payload: PrinterIn, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)
@@ -209,6 +259,11 @@ async def create_printer(
         max_accel_mm_s2=payload.max_accel_mm_s2,
         max_volumetric_mm3_s=payload.max_volumetric_mm3_s,
     )
+    if payload.template_id:
+        tmpl = await db.get(PrinterTemplate, payload.template_id)
+        if not tmpl:
+            raise HTTPException(400, "Unknown printer template")
+        apply_snapshot(printer, tmpl.snapshot, only_empty=True)
     if payload.camera_auth:
         printer.camera_auth_encrypted = encrypt_secret(payload.camera_auth)
     apply_printer_geometry_defaults(printer)

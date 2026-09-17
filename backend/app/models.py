@@ -743,6 +743,10 @@ class MaintenanceLog(TimestampMixin, Base):
     hours_at_service: Mapped[float] = mapped_column(Float, default=0)
     kind: Mapped[str] = mapped_column(String(50), default="service")
     notes: Mapped[str] = mapped_column(Text, default="")
+    nozzle_diameter_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    previous_nozzle_diameter_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nozzle_material: Mapped[str] = mapped_column(String(40), default="")
+    previous_nozzle_material: Mapped[str] = mapped_column(String(40), default="")
 
     printer: Mapped[Printer] = relationship(back_populates="maintenance_logs")
 
@@ -1302,5 +1306,19 @@ class SlicerDurationStat(TimestampMixin, Base):
     actual_seconds: Mapped[float] = mapped_column(Float, default=0)
     sample_count: Mapped[int] = mapped_column(Integer, default=0)
     calibration_multiplier: Mapped[float] = mapped_column(Float, default=1.0)
+
+
+class PrinterTemplate(TimestampMixin, Base):
+    """Reusable printer geometry / nozzle snapshot for adding matching machines."""
+
+    __tablename__ = "printer_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    source_printer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("printers.id", ondelete="SET NULL"), nullable=True
+    )
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 

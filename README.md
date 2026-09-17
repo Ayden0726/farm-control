@@ -203,6 +203,8 @@ New hardware is an adapter class, not an application rewrite:
 
 API keys are encrypted at rest and **never** returned to the browser.
 
+When adding a printer, set **build plate** X/Y/Z and **nozzle size**. The slicer packs to that plate. Known models (K1 Max, CR-6, Voron) fill a starting size from the model name. On a printer’s page, **Save template** stores plate, nozzle, and compatibility settings; **Add printer** can start from that template. Change the installed nozzle from the printer page or the slicer, and **Log maintenance** records the old and new size on the history at `/maintenance`.
+
 Use **http://PRINTER_LAN_IP** (OctoPrint is usually port 80). FarmOS does not require TLS certificates on the printer and ignores self-signed HTTPS if the box redirects. OctoPrint **HTTP 409** while adding a printer means OctoPrint is up but the machine is not connected in OctoPrint (USB/serial). That is not a certificate error — connect the printer in the OctoPrint UI, or save anyway; FarmOS will keep it offline until it is connected.
 
 ## WooCommerce

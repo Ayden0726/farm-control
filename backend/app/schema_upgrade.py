@@ -8,6 +8,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection
 
 from app.db import Base
+from app import models as _models  # noqa: F401 — register tables on Base.metadata
 
 logger = logging.getLogger("farmos.schema")
 
@@ -172,6 +173,12 @@ TABLE_COLUMNS = {
     "purchase_order_lines": {
         "hardware_item_id": "UUID",
         "line_kind": "VARCHAR(40) DEFAULT 'filament'",
+    },
+    "maintenance_logs": {
+        "nozzle_diameter_mm": "DOUBLE PRECISION",
+        "previous_nozzle_diameter_mm": "DOUBLE PRECISION",
+        "nozzle_material": "VARCHAR(40) DEFAULT ''",
+        "previous_nozzle_material": "VARCHAR(40) DEFAULT ''",
     },
 }
 

@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { PlatePreview, type PlateView } from "@/components/plate-preview";
 import { formatDuration, formatGramsKnown, formatMoneyKnown } from "@/lib/format";
 import { toast } from "sonner";
+import { NozzleFields } from "@/components/nozzle-fields";
+import { optionalMm } from "@/lib/printer-geometry";
 
 type Profile = {
   id: string;
@@ -134,6 +136,12 @@ function SlicerPage() {
   );
   const [override, setOverride] = useState(false);
   const [runId] = useState(params.get("run_id") || "");
+  const [bedX, setBedX] = useState("");
+  const [bedY, setBedY] = useState("");
+  const [bedZ, setBedZ] = useState("");
+  const [nozzleMm, setNozzleMm] = useState("");
+  const [nozzleMaterial, setNozzleMaterial] = useState("");
+  const [savingPrinter, setSavingPrinter] = useState(false);
 
   const stl = stls.find((s) => s.id === stlId) || null;
   const profile = profiles.find((p) => p.id === profileId) || null;
@@ -186,6 +194,22 @@ function SlicerPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!printer) {
+      setBedX("");
+      setBedY("");
+      setBedZ("");
+      setNozzleMm("");
+      setNozzleMaterial("");
+      return;
+    }
+    setBedX(String(printer.usable_x_mm || printer.build_x_mm || ""));
+    setBedY(String(printer.usable_y_mm || printer.build_y_mm || ""));
+    setBedZ(String(printer.usable_z_mm || printer.build_z_mm || ""));
+    setNozzleMm(printer.nozzle_diameter_mm != null ? String(printer.nozzle_diameter_mm) : "0.4");
+    setNozzleMaterial(printer.nozzle_material || "");
+  }, [printerId, printer]);
 
   async function refreshPack(next?: Partial<{ qty: number; spacing: number; fill: boolean; printer: string; stl: string; profile: string }>) {
     const sid = next?.stl ?? stlId;
@@ -494,8 +518,69 @@ function SlicerPage() {
                       {p.name} {p.nozzle_diameter_mm ? `· ${p.nozzle_diameter_mm} mm` : ""} {p.status}
                     </option>
                   ))}
-                </select>
-              </div>
+                  </select>
+                </div>
+              {printer && (
+                <div className="space-y-2 rounded-lg border border-white/8 p-3">
+                  <div className="text-sm font-medium">Build plate & nozzle</div>
+                  <p className="text-xs text-zinc-500">
+                    Packing uses this printer’s usable plate. Saving writes it on the printer record.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label>X mm</Label>
+                      <Input inputMode="decimal" value={bedX} onChange={(e) => setBedX(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Y mm</Label>
+                      <Input inputMode="decimal" value={bedY} onChange={(e) => setBedY(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Z mm</Label>
+                      <Input inputMode="decimal" value={bedZ} onChange={(e) => setBedZ(e.target.value)} />
+                    </div>
+                  </div>
+                  <NozzleFields
+                    diameter={nozzleMm}
+                    material={nozzleMaterial}
+                    onDiameter={setNozzleMm}
+                    onMaterial={setNozzleMaterial}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={savingPrinter}
+                    onClick={async () => {
+                      setSavingPrinter(true);
+                      try {
+                        await api(`/api/v1/printers/${printer.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            build_x_mm: optionalMm(bedX),
+                            build_y_mm: optionalMm(bedY),
+                            build_z_mm: optionalMm(bedZ),
+                            usable_x_mm: optionalMm(bedX),
+                            usable_y_mm: optionalMm(bedY),
+                            usable_z_mm: optionalMm(bedZ),
+                            nozzle_diameter_mm: optionalMm(nozzleMm),
+                            nozzle_material: nozzleMaterial,
+                          }),
+                        });
+                        toast.success("Printer plate and nozzle saved");
+                        await load();
+                        await refreshPack();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Could not save printer");
+                      } finally {
+                        setSavingPrinter(false);
+                      }
+                    }}
+                  >
+                    {savingPrinter ? "Saving…" : "Save plate & nozzle to printer"}
+                  </Button>
+                </div>
+              )}
               <Button type="button" variant="outline" className="w-full" onClick={autoSelect} disabled={!stlId}>
                 Auto-select printer
               </Button>

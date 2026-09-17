@@ -103,17 +103,25 @@ async def list_maintenance(db: AsyncSession = Depends(get_db), _: User = Depends
         )
     ).scalars().all()
     return [
-        MaintenanceOut(
-            id=r.id,
-            printer_id=r.printer_id,
-            printer_name=r.printer.name if r.printer else None,
-            performed_at=r.performed_at,
-            hours_at_service=r.hours_at_service,
-            kind=r.kind,
-            notes=r.notes,
-        )
+        _maintenance_out(r)
         for r in rows
     ]
+
+
+def _maintenance_out(r: MaintenanceLog, printer_name: str | None = None) -> MaintenanceOut:
+    return MaintenanceOut(
+        id=r.id,
+        printer_id=r.printer_id,
+        printer_name=printer_name if printer_name is not None else (r.printer.name if r.printer else None),
+        performed_at=r.performed_at,
+        hours_at_service=r.hours_at_service,
+        kind=r.kind,
+        notes=r.notes,
+        nozzle_diameter_mm=getattr(r, "nozzle_diameter_mm", None),
+        previous_nozzle_diameter_mm=getattr(r, "previous_nozzle_diameter_mm", None),
+        nozzle_material=getattr(r, "nozzle_material", "") or "",
+        previous_nozzle_material=getattr(r, "previous_nozzle_material", "") or "",
+    )
 
 
 @maint_router.get("/due")
@@ -151,12 +159,31 @@ async def log_maintenance(
     if not printer:
         raise HTTPException(404, "Printer not found")
     hours = payload.hours_at_service if payload.hours_at_service is not None else printer.total_print_seconds / 3600
+    prev_nozzle = printer.nozzle_diameter_mm
+    prev_material = printer.nozzle_material or ""
+    new_nozzle = payload.nozzle_diameter_mm
+    new_material = payload.nozzle_material if payload.nozzle_material is not None else None
+    if new_nozzle is not None:
+        printer.nozzle_diameter_mm = new_nozzle
+    if new_material is not None:
+        printer.nozzle_material = new_material.strip()
+    kind = payload.kind or "service"
+    if kind == "service" and new_nozzle is not None and new_nozzle != prev_nozzle:
+        kind = "nozzle"
+    notes = payload.notes
+    if new_nozzle is not None and not notes.strip():
+        old = f"{prev_nozzle:g} mm" if prev_nozzle else "unset"
+        notes = f"Nozzle {old} → {new_nozzle:g} mm"
     log = MaintenanceLog(
         printer_id=printer.id,
         hours_at_service=hours,
-        kind=payload.kind,
-        notes=payload.notes,
+        kind=kind,
+        notes=notes,
         performed_at=utcnow(),
+        nozzle_diameter_mm=printer.nozzle_diameter_mm,
+        previous_nozzle_diameter_mm=prev_nozzle,
+        nozzle_material=printer.nozzle_material or "",
+        previous_nozzle_material=prev_material,
     )
     db.add(log)
     printer.last_maintenance_at = log.performed_at
@@ -164,15 +191,7 @@ async def log_maintenance(
     printer.total_print_seconds = 0
     await db.commit()
     await db.refresh(log)
-    return MaintenanceOut(
-        id=log.id,
-        printer_id=log.printer_id,
-        printer_name=printer.name,
-        performed_at=log.performed_at,
-        hours_at_service=log.hours_at_service,
-        kind=log.kind,
-        notes=log.notes,
-    )
+    return _maintenance_out(log, printer.name)
 
 
 @analytics_router.get("")
