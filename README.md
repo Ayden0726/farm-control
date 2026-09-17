@@ -38,19 +38,54 @@ The script installs Docker if needed (Linux), writes `.env` with random secrets 
 
 The first image build downloads PrusaSlicer and can take several minutes. After that, open **Slicer** at `/slicer`. You do not need a second command to start the slicer worker.
 
-If the wizard does not appear, login fails, or backend logs say **password authentication failed**, leftover Docker volumes still have an old database password. Reset shop data (this wipes Postgres) and start again:
-
-```bash
-./install.sh --reset
-```
-
-Windows: `.\install.ps1 -Reset`
-
-If phones or other PCs will use a specific address:
+If login fails or the wizard does not appear, see **Clean install** below.
 
 ```bash
 ./install.sh --host http://192.168.1.50:3000
 ```
+
+## Clean install (wipe shop data and run setup again)
+
+Use this when the wizard does not appear, login fails, you want a fresh database, or you are setting the farm up again on a machine that already ran FarmOS.
+
+**Linux / WSL:**
+
+```bash
+cd farm-control
+./install.sh --reset
+```
+
+**Windows (Docker Desktop):**
+
+```powershell
+cd farm-control
+.\install.ps1 -Reset
+```
+
+`--reset` stops the containers and **deletes the Postgres and Redis volumes**. That wipes orders, the print queue, inventory, users, and settings stored in the database. The setup wizard at `/setup` runs again.
+
+**Kept:** the `.env` file (secrets and `PUBLIC_APP_URL`) and uploaded files on the Docker `uploads` volume (G-code / STLs), unless you remove that volume yourself.
+
+Then open the URL the script prints (LAN IP and `http://127.0.0.1:3000`) and complete setup. Uncheck **Load demo data** for a live shop.
+
+To also throw away uploaded G-code and STLs:
+
+```bash
+docker compose down -v
+./install.sh --reset
+```
+
+## Everyday commands
+
+```bash
+./install.sh              # first install (Linux / WSL)
+./install.sh --reset      # clean install — wipe DB, keep .env
+./update.sh               # pull GitHub and rebuild (prints the URL when done)
+docker compose down       # stop FarmOS
+./scripts/backup.sh       # Postgres dump under ./backups/
+```
+
+Windows: `.\install.ps1`, `.\install.ps1 -Reset`, `.\update.ps1`.
 
 ## Production slicer (PrusaSlicer worker)
 
@@ -97,7 +132,17 @@ Windows with Docker Desktop: `.\update.ps1`
 
 That pulls the latest code and rebuilds containers (including the slicer-worker). Postgres data and uploaded G-code are kept. **Settings → Update Print FarmOS** is enabled once the stack is up — the API keeps a heartbeat and the `update-agent` container (or the in-process updater) runs `./update.sh` when you press the button.
 
-The API is on port 8000 (`/docs` for OpenAPI).
+When `./update.sh` finishes it prints the same addresses as install, for example:
+
+```
+Open:   http://YOUR_LAN_IP:3000
+Local:  http://127.0.0.1:3000
+Slicer: http://YOUR_LAN_IP:3000/slicer
+```
+
+`Open` uses `PUBLIC_APP_URL` from `.env` when set. Hard-refresh the browser (**Ctrl+Shift+R**) if the UI looks old.
+
+The API is on port 8000 (`/docs` for OpenAPI). This is **not** a clean install — use `./install.sh --reset` if you need an empty farm.
 
 ## What the queue does
 
