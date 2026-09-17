@@ -32,8 +32,31 @@ docker compose up -d --build db redis backend worker slicer-worker frontend
 if ($LASTEXITCODE -ne 0) { Write-Error "docker compose failed" }
 docker compose up -d --no-build update-agent
 
+$hostUrl = ""
+if (Test-Path ".\.env") {
+  $existing = (Select-String -Path ".\.env" -Pattern "^PUBLIC_APP_URL=" | Select-Object -Last 1)
+  if ($existing) {
+    $hostUrl = $existing.Line.Substring("PUBLIC_APP_URL=".Length).Trim()
+  }
+}
+if (-not $hostUrl) {
+  $lan = "127.0.0.1"
+  try {
+    $cfg = Get-NetIPConfiguration | Where-Object {
+      $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq "Up"
+    } | Select-Object -First 1
+    if ($cfg -and $cfg.IPv4Address) { $lan = $cfg.IPv4Address.IPAddress }
+  } catch { }
+  $hostUrl = "http://${lan}:3000"
+}
+$slicerUrl = ($hostUrl.TrimEnd("/") + "/slicer")
+
 Write-Host ""
-Write-Host "Update complete. Open the FarmOS URL in your browser."
+Write-Host "Update complete."
+Write-Host "  Open:   $hostUrl"
+Write-Host "  Local:  http://127.0.0.1:3000"
+Write-Host "  Slicer: $slicerUrl"
+Write-Host ""
 Write-Host "If the UI looks old, hard-refresh (Ctrl+Shift+R)."
 
 if (-not $env:UPDATE_FROM_AGENT) {

@@ -52,8 +52,32 @@ echo "==> Rebuilding Print FarmOS ${APP_VERSION} (database and G-code uploads ar
 compose up -d --build db redis backend worker slicer-worker frontend
 compose up -d --no-build update-agent 2>/dev/null || true
 
+detect_ip() {
+  local ip=""
+  ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}' || true)"
+  if [[ -z "$ip" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  if [[ -z "$ip" ]]; then
+    ip="$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1 || true)"
+  fi
+  echo "${ip:-127.0.0.1}"
+}
+
+HOST_URL=""
+if [[ -f .env ]]; then
+  HOST_URL="$(grep -E '^PUBLIC_APP_URL=' .env | tail -n1 | cut -d= -f2- || true)"
+fi
+if [[ -z "$HOST_URL" ]]; then
+  HOST_URL="http://$(detect_ip):3000"
+fi
+
 echo
-echo "Update complete. Open the FarmOS URL in your browser."
+echo "Update complete."
+echo "  Open:   ${HOST_URL}"
+echo "  Local:  http://127.0.0.1:3000"
+echo "  Slicer: ${HOST_URL%/}/slicer"
+echo
 echo "If the UI looks old, do a hard refresh (Ctrl+Shift+R)."
 echo "Backup anytime with: ./scripts/backup.sh"
 
