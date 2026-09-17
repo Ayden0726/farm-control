@@ -40,6 +40,8 @@ The first image build downloads PrusaSlicer and can take several minutes. After 
 
 If login fails or the wizard does not appear, see **Clean install** below.
 
+If phones or other PCs will use a specific address:
+
 ```bash
 ./install.sh --host http://192.168.1.50:3000
 ```
