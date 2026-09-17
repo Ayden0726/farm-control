@@ -43,17 +43,23 @@ function parseDetail(body: { detail?: unknown }): { detail: string; howToFix: st
 
 export function apiUrl(path: string): string {
   if (typeof window === "undefined") return path;
-  const { protocol, hostname, port } = window.location;
-  if (port === "3000") {
-    return `${protocol}//${hostname}:8000${path}`;
-  }
   return path;
 }
 
 function requestUrls(path: string): string[] {
   if (typeof window === "undefined") return [path];
-  const direct = apiUrl(path);
-  return direct === path ? [path] : [direct, path];
+  const { protocol, hostname, port } = window.location;
+  const urls = [path];
+  if (port === "3000") {
+    urls.push(`${protocol}//${hostname}:8000${path}`);
+  }
+  return urls;
+}
+
+function requestTimeoutMs(path: string, init: RequestInit): number {
+  if (typeof FormData !== "undefined" && init.body instanceof FormData) return 5 * 60 * 1000;
+  if (/\/(slicer|stl)(\/|\?|$)/i.test(path)) return 3 * 60 * 1000;
+  return 60 * 1000;
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -74,7 +80,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
         ...init,
         headers,
         cache: "no-store",
-        signal: init.signal ?? AbortSignal.timeout(20000),
+        signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs(path, init)),
       });
       const json = (attempt.headers.get("content-type") || "").includes("application/json");
       if (attempt.status >= 500 && !json && url !== urls[urls.length - 1]) {
@@ -91,7 +97,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(
       503,
       lastError instanceof Error && lastError.message !== "proxy"
-        ? "Cannot reach the farm API on port 8000. In WSL run: docker compose logs backend"
+        ? "Cannot reach the farm API. Check Docker is running, then in WSL run: docker compose logs backend"
         : "The farm API did not respond. In WSL run: docker compose logs backend",
     );
   }
@@ -134,7 +140,7 @@ export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blo
         ...init,
         headers,
         cache: "no-store",
-        signal: init.signal ?? AbortSignal.timeout(30000),
+        signal: init.signal ?? AbortSignal.timeout(requestTimeoutMs(path, init)),
       });
       res = attempt;
       break;

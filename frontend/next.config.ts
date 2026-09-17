@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   // Preview and local browsers hit 127.0.0.1; Next 16 otherwise 403s /_next chunks
   // so the login form never hydrates and pages stay on their SSR “Loading…” text.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  experimental: {
+    proxyClientMaxBodySize: "100mb",
+    serverActions: { bodySizeLimit: "100mb" },
+  },
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${api}/api/:path*` },
