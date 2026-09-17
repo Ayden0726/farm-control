@@ -75,6 +75,18 @@ def clamp_spacing(spacing_mm: float, min_safe: float = MIN_SPACING_MM) -> float:
     return min(MAX_SPACING_MM, max(floor, gap))
 
 
+def copies_to_pack(quantity: int | None, fill_plate: bool, max_q: int) -> int:
+    """How many copies to nest on this plate.
+
+    A full plate is `fill_plate` or an omitted quantity — that is the right end
+    of the slicer parts slider. A specific count is packed as requested; geometry
+    may still cap it inside `pack_copies`.
+    """
+    if fill_plate or quantity is None:
+        return max(0, int(max_q))
+    return max(0, int(quantity))
+
+
 def spacing_hint(spacing_mm: float, recommended_mm: float = DEFAULT_SPACING_MM) -> str:
     rec = max(MIN_SPACING_MM, float(recommended_mm or DEFAULT_SPACING_MM))
     if spacing_mm <= rec - 1.5:

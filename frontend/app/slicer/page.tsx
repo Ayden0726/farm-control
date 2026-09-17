@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
 import type { Part, Printer, Stl } from "@/lib/types";
@@ -13,6 +13,7 @@ import { PlatePreview, type PlateView } from "@/components/plate-preview";
 import { formatDuration, formatGramsKnown, formatMoneyKnown } from "@/lib/format";
 import { toast } from "sonner";
 import { NozzleFields } from "@/components/nozzle-fields";
+import { RangeSlider } from "@/components/range-slider";
 import { optionalMm } from "@/lib/printer-geometry";
 
 type Profile = {
@@ -142,11 +143,21 @@ function SlicerPage() {
   const [nozzleMm, setNozzleMm] = useState("");
   const [nozzleMaterial, setNozzleMaterial] = useState("");
   const [savingPrinter, setSavingPrinter] = useState(false);
+  const packSeq = useRef(0);
+  const packTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qtyRef = useRef(qty);
+  const fillRef = useRef(fillPlate);
+  const spacingRef = useRef(spacing);
+  qtyRef.current = qty;
+  fillRef.current = fillPlate;
+  spacingRef.current = spacing;
 
   const stl = stls.find((s) => s.id === stlId) || null;
   const profile = profiles.find((p) => p.id === profileId) || null;
   const printer = printers.find((p) => p.id === printerId) || null;
   const maxQty = pack?.max_quantity ?? 0;
+  const sliderMax = Math.max(1, maxQty);
+  const plateFull = maxQty > 0 && (fillPlate || qty >= maxQty);
 
   const load = useCallback(async () => {
     setError(null);
@@ -211,7 +222,9 @@ function SlicerPage() {
     setNozzleMaterial(printer.nozzle_material || "");
   }, [printerId, printer]);
 
-  async function refreshPack(next?: Partial<{ qty: number; spacing: number; fill: boolean; printer: string; stl: string; profile: string }>) {
+  type PackOpts = Partial<{ qty: number; spacing: number; fill: boolean; printer: string; stl: string; profile: string }>;
+
+  async function refreshPack(next?: PackOpts) {
     const sid = next?.stl ?? stlId;
     const pid = next?.printer ?? printerId;
     const prof = next?.profile ?? profileId;
@@ -219,46 +232,97 @@ function SlicerPage() {
       setPack(null);
       return;
     }
+    const fill = next?.fill ?? fillRef.current;
+    const requestedQty = next?.qty ?? qtyRef.current;
+    const requestedSpacing = next?.spacing ?? spacingRef.current;
+    const seq = ++packSeq.current;
     setPacking(true);
     try {
       const body = {
         stl_id: sid,
         printer_id: pid,
         profile_id: prof || null,
-        quantity: next?.fill ?? fillPlate ? null : next?.qty ?? qty,
-        spacing_mm: next?.spacing ?? spacing,
-        fill_plate: next?.fill ?? fillPlate,
+        quantity: fill ? null : requestedQty,
+        spacing_mm: requestedSpacing,
+        fill_plate: fill,
         optimisation_mode: mode,
       };
       const res = await api<PackResponse>("/api/v1/slicer/pack", { method: "POST", body: JSON.stringify(body) });
+      if (seq !== packSeq.current) return;
       setPack(res);
       setSpacing(res.spacing_mm);
-      if (next?.fill ?? fillPlate) setQty(res.plate.quantity);
-      else setQty(Math.min(next?.qty ?? qty, res.max_quantity || 1));
+      spacingRef.current = res.spacing_mm;
+      const cap = res.max_quantity;
+      if (fill || (cap > 0 && requestedQty >= cap)) {
+        setFillPlate(true);
+        fillRef.current = true;
+        setQty(cap);
+        qtyRef.current = cap;
+      } else if (cap <= 0) {
+        setFillPlate(false);
+        fillRef.current = false;
+        setQty(0);
+        qtyRef.current = 0;
+      } else {
+        setFillPlate(false);
+        fillRef.current = false;
+        const nextQty = Math.min(Math.max(1, requestedQty), cap);
+        setQty(nextQty);
+        qtyRef.current = nextQty;
+      }
       if (res.compatibility.issues.length) {
         try {
           const c = await api<{ title: string; reason: string; alternatives: { printer_name: string; printer_id: string }[] }>(
             "/api/v1/slicer/compatibility",
             { method: "POST", body: JSON.stringify(body) },
           );
+          if (seq !== packSeq.current) return;
           setCompat(c);
         } catch {
+          if (seq !== packSeq.current) return;
           setCompat({ title: "Cannot Use This Printer", reason: res.compatibility.reason, alternatives: [] });
         }
       } else {
         setCompat(null);
       }
     } catch (err) {
+      if (seq !== packSeq.current) return;
       toast.error(err instanceof Error ? err.message : "Could not pack this plate");
     } finally {
-      setPacking(false);
+      if (seq === packSeq.current) setPacking(false);
     }
+  }
+
+  function schedulePack(next?: PackOpts) {
+    if (packTimer.current) window.clearTimeout(packTimer.current);
+    packTimer.current = window.setTimeout(() => {
+      refreshPack(next);
+    }, 160);
+  }
+
+  function applyQty(n: number, immediate = false) {
+    if (!Number.isFinite(n)) return;
+    const cap = Math.max(1, maxQty);
+    const next = Math.min(cap, Math.max(1, Math.round(n)));
+    const fill = maxQty > 0 && next >= maxQty;
+    setQty(next);
+    qtyRef.current = next;
+    setFillPlate(fill);
+    fillRef.current = fill;
+    if (immediate) refreshPack({ qty: next, fill });
+    else schedulePack({ qty: next, fill });
   }
 
   useEffect(() => {
     if (stlId && printerId) refreshPack();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stlId, printerId, profileId, mode]);
+
+  useEffect(() => {
+    return () => {
+      if (packTimer.current) window.clearTimeout(packTimer.current);
+    };
+  }, []);
 
   async function autoSelect() {
     if (!stlId) {
@@ -328,9 +392,9 @@ function SlicerPage() {
           stl_id: stlId,
           printer_id: printerId,
           profile_id: profileId,
-          quantity: qty,
-          spacing_mm: spacing,
-          fill_plate: fillPlate,
+          quantity: qtyRef.current,
+          spacing_mm: spacingRef.current,
+          fill_plate: fillRef.current,
           fill_until_complete: fillUntil,
           needed_qty: fillUntil ? needed || qty : qty,
           optimisation_mode: mode,
@@ -679,7 +743,19 @@ function SlicerPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={() => { setFillPlate(true); refreshPack({ fill: true }); }} disabled={!stlId || !printerId}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFillPlate(true);
+                    fillRef.current = true;
+                    if (maxQty > 0) {
+                      setQty(maxQty);
+                      qtyRef.current = maxQty;
+                    }
+                    refreshPack({ fill: true });
+                  }}
+                  disabled={!stlId || !printerId || maxQty <= 0}
+                >
                   Fill Plate
                 </Button>
                 <select
@@ -696,55 +772,66 @@ function SlicerPage() {
               </div>
               <div>
                 <Label>
-                  Parts on plate {pack ? `(max ${maxQty} at ${spacing} mm)` : ""}
+                  Parts on plate{" "}
+                  {pack
+                    ? plateFull
+                      ? `(full plate · ${maxQty} at ${spacing} mm)`
+                      : `(${qty} of ${maxQty} at ${spacing} mm)`
+                    : ""}
                 </Label>
                 <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={Math.max(1, maxQty)}
-                    value={qty}
+                  <span className="w-6 shrink-0 text-xs text-zinc-500">1</span>
+                  <RangeSlider
                     className="flex-1"
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      setFillPlate(false);
-                      setQty(n);
-                      refreshPack({ qty: n, fill: false });
-                    }}
+                    min={1}
+                    max={sliderMax}
+                    step={1}
+                    value={Math.min(sliderMax, Math.max(1, qty || 1))}
+                    disabled={!stlId || !printerId || maxQty <= 0}
+                    aria-label="Parts on plate"
+                    onValueChange={(n) => applyQty(n)}
                   />
+                  <span className="w-16 shrink-0 text-right text-xs text-zinc-400">
+                    {maxQty > 0 ? `Full · ${maxQty}` : "Full"}
+                  </span>
                   <Input
                     className="w-20"
                     type="number"
                     min={1}
-                    max={Math.max(1, maxQty)}
-                    value={qty}
-                    onChange={(e) => {
-                      const n = Math.max(1, Number(e.target.value) || 1);
-                      setFillPlate(false);
-                      setQty(n);
-                      refreshPack({ qty: n, fill: false });
-                    }}
+                    max={sliderMax}
+                    value={qty || ""}
+                    disabled={!stlId || !printerId || maxQty <= 0}
+                    onChange={(e) => applyQty(Number(e.target.value))}
                   />
                 </div>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Drag to change how many copies are nested. The right end is a full plate — as many as fit at the current spacing.
+                </p>
               </div>
               <div>
                 <Label>
                   Part spacing {spacing} mm · {pack?.spacing_hint || "Recommended"}
                 </Label>
-                <input
-                  type="range"
-                  min={2}
-                  max={30}
-                  step={0.5}
-                  value={spacing}
-                  className="w-full"
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setSpacing(n);
-                    refreshPack({ spacing: n });
-                  }}
-                />
-                <p className="text-xs text-zinc-500">Tight / Recommended / Conservative. Changing spacing re-packs and updates the parts maximum.</p>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 shrink-0 text-xs text-zinc-500">2</span>
+                  <RangeSlider
+                    min={2}
+                    max={30}
+                    step={0.5}
+                    value={spacing}
+                    disabled={!stlId || !printerId}
+                    aria-label="Part spacing in millimetres"
+                    onValueChange={(n) => {
+                      setSpacing(n);
+                      spacingRef.current = n;
+                      schedulePack({ spacing: n, fill: fillRef.current, qty: qtyRef.current });
+                    }}
+                  />
+                  <span className="w-10 shrink-0 text-right text-xs text-zinc-500">30</span>
+                </div>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Tight / Recommended / Conservative. Wider spacing lowers the parts maximum; a full plate stays full at the new max.
+                </p>
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={fillUntil} onChange={(e) => setFillUntil(e.target.checked)} />
@@ -759,6 +846,7 @@ function SlicerPage() {
               {packing && <p className="text-sm text-zinc-500">Re-packing…</p>}
               {pack && (
                 <p className="text-sm text-zinc-300">
+                  {plateFull ? "Full plate · " : ""}
                   {pack.plate.quantity} parts · {pack.spacing_mm} mm spacing · {((pack.plate.utilisation ?? 0) * 100).toFixed(0)}% bed used ·{" "}
                   <span className="text-amber-200">Pre-Slice Estimate</span> {formatDuration(pack.pre_slice_estimate.seconds)} ·{" "}
                   {formatGramsKnown(pack.pre_slice_estimate.filament_grams)}

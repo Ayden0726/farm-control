@@ -31,10 +31,9 @@ from app.models import (
 )
 from app.services.plate_pack import (
     DEFAULT_SPACING_MM,
-    MIN_SPACING_MM,
-    RELIABLE_SPACING_MM,
     candidate_layouts,
     clamp_spacing,
+    copies_to_pack,
     max_quantity,
     orientation_from_json,
     pack_copies,
@@ -221,13 +220,9 @@ def _pack_one(stl: StlFile, printer: Printer, profile: SlicerProfile | None, pay
     keepouts = keepout_aabbs(printer)
     brim = float(profile.brim_width_mm) if profile else 0.0
     rec = float(stl.recommended_spacing_mm or DEFAULT_SPACING_MM)
+    # Honour the spacing slider. Optimisation mode must not silently rewrite the gap
+    # when Fill Plate is on — that made the spacing control snap back.
     gap = clamp_spacing(payload.spacing_mm, 2.0)
-    mode = (payload.optimisation_mode or "balanced").lower()
-    if payload.fill_plate:
-        if mode in {"maximum_reliability", "reliability"}:
-            gap = clamp_spacing(max(gap, RELIABLE_SPACING_MM))
-        elif mode in {"maximum_parts", "max_parts"}:
-            gap = clamp_spacing(min(gap, max(MIN_SPACING_MM, rec - 2)))
     rules = orientation_from_json(payload.orientation or stl.orientation_json)
     max_q = max_quantity(
         float(stl.bbox_x_mm),
@@ -239,7 +234,7 @@ def _pack_one(stl: StlFile, printer: Printer, profile: SlicerProfile | None, pay
         keepouts,
         rules,
     )
-    want = max_q if payload.fill_plate or payload.quantity is None else max(0, int(payload.quantity))
+    want = copies_to_pack(payload.quantity, payload.fill_plate, max_q)
     if payload.placements:
         from app.services.plate_pack import PackResult, PlacedPart
 

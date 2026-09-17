@@ -3,6 +3,7 @@ import unittest
 from app.services.costing import filament_line_cost
 from app.services.plate_pack import (
     clamp_spacing,
+    copies_to_pack,
     max_quantity,
     pack_copies,
     plan_plates,
@@ -47,6 +48,26 @@ class PackingTests(unittest.TestCase):
         self.assertGreater(tight, wide)
         self.assertGreaterEqual(tight, 16)
         self.assertEqual(wide, 4)
+
+    def test_slider_count_is_not_forced_to_fill(self) -> None:
+        packed = pack_copies(20, 20, 100, 100, 3, 6)
+        self.assertEqual(packed.quantity, 3)
+        self.assertGreater(packed.max_quantity, 3)
+        self.assertEqual(packed.spacing_mm, 6)
+
+    def test_full_plate_sits_at_max_quantity(self) -> None:
+        max_q = max_quantity(20, 20, 100, 100, 8)
+        filled = pack_copies(20, 20, 100, 100, copies_to_pack(None, True, max_q), 8)
+        self.assertGreater(max_q, 1)
+        self.assertEqual(filled.quantity, max_q)
+        self.assertEqual(filled.max_quantity, max_q)
+        self.assertEqual(filled.spacing_mm, 8)
+
+    def test_copies_to_pack_full_plate_is_max(self) -> None:
+        self.assertEqual(copies_to_pack(None, False, 12), 12)
+        self.assertEqual(copies_to_pack(4, True, 12), 12)
+        self.assertEqual(copies_to_pack(4, False, 12), 4)
+        self.assertEqual(copies_to_pack(1, False, 1), 1)
 
     def test_keepout_blocks_corner(self) -> None:
         packed = pack_copies(
