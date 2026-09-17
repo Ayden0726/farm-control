@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import struct
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from app.models import (
     ProductionRunStatus,
     QcBatch,
     QcStatus,
+    StlFile,
     utcnow,
 )
 from app.services.gcode_meta import (
@@ -41,6 +43,38 @@ from app.services.gcode_meta import (
 )
 from app.services.inventory import get_or_create_stock
 from app.util import new_qr_token, parse_quantity_from_filename
+
+
+def _demo_stl_box(sx: float, sy: float, sz: float) -> bytes:
+    verts = [
+        (0, 0, 0),
+        (sx, 0, 0),
+        (sx, sy, 0),
+        (0, sy, 0),
+        (0, 0, sz),
+        (sx, 0, sz),
+        (sx, sy, sz),
+        (0, sy, sz),
+    ]
+    faces = [
+        (0, 1, 2),
+        (0, 2, 3),
+        (4, 6, 5),
+        (4, 7, 6),
+        (0, 4, 5),
+        (0, 5, 1),
+        (1, 5, 6),
+        (1, 6, 2),
+        (2, 6, 7),
+        (2, 7, 3),
+        (3, 7, 4),
+        (3, 4, 0),
+    ]
+    buf = bytearray(80)
+    buf += struct.pack("<I", 12)
+    for i, j, k in faces:
+        buf += struct.pack("<12fH", 0, 0, 1, *verts[i], *verts[j], *verts[k], 0)
+    return bytes(buf)
 
 
 def _gcode_content(name: str, seconds: int, grams: float) -> str:
@@ -168,6 +202,33 @@ async def seed_demo(db: AsyncSession) -> None:
         db.add(printer)
         printers.append(printer)
     await db.flush()
+
+    from app.services.slicer_defaults import ensure_slicer_defaults
+    from app.services.stl import bounding_box
+
+    await ensure_slicer_defaults(db)
+    settings.stl_dir.mkdir(parents=True, exist_ok=True)
+    handle_stl = _demo_stl_box(48.0, 18.0, 8.0)
+    handle_path = settings.stl_dir / "RK-FR5-Handle-v1.stl"
+    handle_path.write_bytes(handle_stl)
+    box = bounding_box(handle_stl)
+    db.add(
+        StlFile(
+            filename="RK-FR5-Handle-v1.stl",
+            stored_path=str(handle_path),
+            part_id=parts["RK-FR5-Handle"].id,
+            notes="Demo handle mesh (placeholder). Replace with the production STL before real slicing.",
+            file_size_bytes=len(handle_stl),
+            bbox_x_mm=box.x_mm if box else 48.0,
+            bbox_y_mm=box.y_mm if box else 18.0,
+            bbox_z_mm=box.z_mm if box else 8.0,
+            triangle_count=box.triangle_count if box else 12,
+            volume_mm3=box.volume_mm3 if box else 48.0 * 18.0 * 8.0,
+            version=1,
+            production_approved=True,
+            recommended_spacing_mm=6.0,
+        )
+    )
 
     run = ProductionRun(
         name="Flex Rack 5 — Batch 001",

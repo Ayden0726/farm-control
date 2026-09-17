@@ -30,11 +30,13 @@ cd farm-control
 
 The GitHub repo is private, so Git will ask you to sign in. Use a [personal access token](https://github.com/settings/tokens) as the password (`repo` scope).
 
-The script installs Docker if needed (Linux), writes `.env` with random secrets, and starts the stack. Open the URL it prints (usually `http://YOUR_SERVER_IP:3000`). First visit should land on `/setup`.
+The script installs Docker if needed (Linux), writes `.env` with random secrets (including slicer CPU/RAM limits), and starts the stack: API, UI, scheduler worker, **and slicer-worker** (PrusaSlicer). Open the URL it prints (usually `http://YOUR_SERVER_IP:3000`). First visit should land on `/setup`.
 
 1. Complete the first-run setup wizard (admin account).
-2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm.
+2. Uncheck **Load demo data** for a live shop. Leave it checked for a simulated farm (includes a sample handle STL for **Slicer**).
 3. Add real printers (OctoPrint, Moonraker/Klipper, Creality K1/K2) when ready.
+
+The first image build downloads PrusaSlicer and can take several minutes. After that, open **Slicer** at `/slicer`. You do not need a second command to start the slicer worker.
 
 If the wizard does not appear, login fails, or backend logs say **password authentication failed**, leftover Docker volumes still have an old database password. Reset shop data (this wipes Postgres) and start again:
 
@@ -52,7 +54,9 @@ If phones or other PCs will use a specific address:
 
 ## Production slicer (PrusaSlicer worker)
 
-FarmOS does **not** implement a slicing engine. A dedicated `slicer-worker` process (separate from uvicorn) runs **PrusaSlicer CLI**. The web API only enqueues Redis jobs (`farmos:slicer:jobs`). Slicing cannot freeze the shop-floor UI.
+FarmOS does **not** implement a slicing engine. `./install.sh` / `.\install.ps1` start a dedicated `slicer-worker` with the rest of the stack. The web API only enqueues Redis jobs (`farmos:slicer:jobs`). Slicing cannot freeze the shop-floor UI.
+
+To restart only the worker after changing CPU/RAM in `.env`:
 
 ```bash
 docker compose up -d slicer-worker

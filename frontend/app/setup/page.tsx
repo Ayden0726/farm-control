@@ -57,7 +57,8 @@ export default function SetupPage() {
         <h1 className="text-2xl font-semibold">Stand up Print FarmOS</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Create the admin account. Optionally load a simulated Flex Rack 5 farm so you can exercise
-          the queue, bed-clear workflow, and dashboard before connecting OctoPrint or Moonraker.
+          the queue, bed-clear workflow, dashboard, and production slicer before connecting OctoPrint
+          or Moonraker. The installer already starts the PrusaSlicer worker with the rest of the stack.
         </p>
         <div className="mt-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -97,8 +98,8 @@ export default function SetupPage() {
           <label className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
             <Checkbox checked={demo} onCheckedChange={(v) => setDemo(Boolean(v))} />
             <span>
-              Load demo data — simulated CR-6 Max, K1 Max, K2 Pro, Voron, Flex Rack 5 BOM, queue, and
-              orders.
+              Load demo data — simulated CR-6 Max, K1 Max, K2 Pro, Voron, Flex Rack 5 BOM, queue,
+              orders, and a sample handle STL for the slicer.
             </span>
           </label>
           <Button type="submit" className="h-12 w-full text-base md:h-8 md:text-sm" disabled={busy}>

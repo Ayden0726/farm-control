@@ -34,6 +34,15 @@ function New-Secret([int]$bytes = 36) {
   return [Convert]::ToBase64String($raw).TrimEnd("=")
 }
 
+function Ensure-EnvKey([string]$Key, [string]$Value) {
+  if (-not (Test-Path ".\.env")) { return }
+  $text = Get-Content ".\.env" -Raw
+  if ($text -match "(?m)^$([regex]::Escape($Key))=") { return }
+  if (-not $text.EndsWith("`n")) { $text += "`n" }
+  $text += "$Key=$Value`n"
+  Set-Content -Path ".\.env" -Value $text -Encoding ascii -NoNewline
+}
+
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
   Write-Error "Docker is not installed. Install Docker Desktop, start it, then re-run .\install.ps1"
 }
@@ -79,6 +88,12 @@ NTFY_TOKEN=
 
 UPLOAD_DIR=/data
 RUN_SCHEDULER=false
+
+# Production slicer (PrusaSlicer CLI runs in slicer-worker, not in the API).
+SLICER_BIN=prusa-slicer
+STL_MAX_BYTES=83886080
+SLICER_CPUS=2.0
+SLICER_MEMORY=2g
 "@ | Set-Content -Path ".\.env" -Encoding ascii
 } else {
   Write-Host "==> Keeping existing .env"
@@ -103,7 +118,12 @@ RUN_SCHEDULER=false
   }
 }
 
-Write-Host "==> Starting Print FarmOS (first run builds images and can take several minutes)"
+Ensure-EnvKey "SLICER_BIN" "prusa-slicer"
+Ensure-EnvKey "STL_MAX_BYTES" "83886080"
+Ensure-EnvKey "SLICER_CPUS" "2.0"
+Ensure-EnvKey "SLICER_MEMORY" "2g"
+
+Write-Host "==> Starting Print FarmOS (first run builds images, including PrusaSlicer, and can take several minutes)"
 New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot "data\update") | Out-Null
 if ($Reset) {
   Write-Host "==> Resetting farm data (docker compose down -v)"
@@ -113,6 +133,11 @@ docker compose up -d --build
 if ($LASTEXITCODE -ne 0) {
   Write-Error "docker compose failed"
 }
+$slicer = docker compose ps --status running --format "{{.Name}}" 2>$null | Select-String "slicer-worker"
+if (-not $slicer) {
+  Write-Host "==> Starting slicer-worker (downloads PrusaSlicer on first build)"
+  docker compose up -d --build slicer-worker
+}
 
 Write-Host ""
 Write-Host "Print FarmOS is starting."
@@ -121,6 +146,7 @@ Write-Host "  Local: http://127.0.0.1:3000"
 Write-Host ""
 Write-Host "First visit opens the setup wizard at $HostUrl/setup — create an admin account."
 Write-Host "Uncheck Load demo data if this is a live shop."
+Write-Host "Slicer:  $HostUrl/slicer  (slicer-worker uses PrusaSlicer)"
 Write-Host "If the wizard does not appear (leftover database), run: .\install.ps1 -Reset"
 Write-Host ""
 Write-Host "Stop:    docker compose down"

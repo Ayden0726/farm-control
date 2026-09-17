@@ -30,7 +30,8 @@ Usage:
   ./install.sh --host http://192.168.1.50:3000
   ./install.sh --reset
 
-This script installs Docker if needed, writes a .env file, and starts the app.
+This script installs Docker if needed, writes a .env file, and starts the app
+(API, UI, scheduler worker, and the PrusaSlicer slicer-worker).
 Open the printed URL and complete the first-run wizard.
 
 --reset  Stop containers and delete Postgres/Redis volumes so the setup wizard
@@ -164,6 +165,12 @@ SMTP_PASSWORD=
 SMTP_FROM=farmos@localhost
 SMTP_TO=
 
+# Production slicer (PrusaSlicer CLI runs in slicer-worker, not in the API).
+SLICER_BIN=prusa-slicer
+STL_MAX_BYTES=83886080
+SLICER_CPUS=2.0
+SLICER_MEMORY=2g
+
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM=
@@ -208,6 +215,23 @@ PY
   mv "$tmp" .env
 }
 
+ensure_env_key() {
+  local key="$1"
+  local value="$2"
+  [[ -f .env ]] || return 0
+  if grep -qE "^${key}=" .env; then
+    return 0
+  fi
+  printf '\n%s=%s\n' "$key" "$value" >> .env
+}
+
+ensure_slicer_env() {
+  ensure_env_key SLICER_BIN prusa-slicer
+  ensure_env_key STL_MAX_BYTES 83886080
+  ensure_env_key SLICER_CPUS 2.0
+  ensure_env_key SLICER_MEMORY 2g
+}
+
 ensure_docker
 
 IP="$(detect_ip)"
@@ -229,8 +253,9 @@ else
     fi
   fi
 fi
+ensure_slicer_env
 
-say "Starting Print FarmOS (first run builds images and can take several minutes)"
+say "Starting Print FarmOS (first run builds images, including PrusaSlicer, and can take several minutes)"
 mkdir -p data/update
 chmod 777 data/update 2>/dev/null || true
 if [[ "$RESET" -eq 1 ]]; then
@@ -245,6 +270,10 @@ if [[ -d .git ]]; then
   fi
 fi
 compose up -d --build
+if ! compose ps --status running --format '{{.Name}}' 2>/dev/null | grep -q slicer-worker; then
+  say "Starting slicer-worker (downloads PrusaSlicer on first build)"
+  compose up -d --build slicer-worker || echo "slicer-worker did not start. Pack/preview still work; Slice needs that container."
+fi
 
 say "Waiting for the API, then the UI"
 ready=0
@@ -282,6 +311,7 @@ echo "  Local: http://127.0.0.1:3000"
 echo
 echo "First visit opens the setup wizard at ${HOST_URL}/setup — create an admin account."
 echo "Uncheck Load demo data if this is a live shop."
+echo "Slicer:  ${HOST_URL}/slicer  (slicer-worker uses PrusaSlicer; packing still works if Slice is waiting on first start)"
 echo "If the wizard does not appear (leftover database), run: ./install.sh --reset"
 echo
 echo "Stop:    docker compose down"
